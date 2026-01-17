@@ -1,10 +1,11 @@
-# 1. Base image
-FROM node:18-alpine AS base
+# 1. Base image (UPDATED TO 20)
+FROM node:20-alpine AS base
 
 # 2. Dependencies
 FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
+# install dependencies
 RUN npm ci
 
 # 3. Builder
@@ -26,6 +27,7 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copy the built standalone output
 COPY --from=builder /app/public ./public
+# Ensure 'output: "standalone"' is in next.config.ts for this to work
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
