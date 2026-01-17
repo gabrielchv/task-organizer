@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   description: "AI Task Organizer using Google Gemini API",
 };
 
+export const viewport: Viewport = {
+  interactiveWidget: 'resizes-content',
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -24,7 +28,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"></meta>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
