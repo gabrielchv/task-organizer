@@ -103,7 +103,10 @@ export default function Home() {
 
       const data: ApiResponse = await response.json();
 
-      if (data.tasks && data.tasks.length > 0) {
+      if (!response.ok || data.error) {
+        const errorMessage = data.error || "An error occurred on the server.";
+        setMessages(prev => [...prev, { type: 'bot', content: `Error: ${errorMessage}` }]);
+      } else if (data.tasks && data.tasks.length > 0) {
         // Format response as HTML list
         const taskList = (
           <div>
@@ -119,7 +122,7 @@ export default function Home() {
         );
         setMessages(prev => [...prev, { type: 'bot', content: taskList }]);
       } else {
-        setMessages(prev => [...prev, { type: 'bot', content: "No tasks identified or an error occurred." }]);
+        setMessages(prev => [...prev, { type: 'bot', content: "No tasks were found." }]);
       }
 
     } catch (error) {
@@ -143,7 +146,7 @@ export default function Home() {
           {messages.map((msg, idx) => (
             <div 
               key={idx} 
-              className={`p-3 rounded-lg shadow-sm max-w-[85%] text-sm ${
+              className={`p-3 rounded-lg shadow-sm max-w-[85%] text-sm wrap-break-word ${
                 msg.type === 'user' 
                   ? 'bg-blue-500 text-white self-end ml-auto' 
                   : 'bg-white text-gray-800 self-start'
