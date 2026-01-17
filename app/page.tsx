@@ -19,12 +19,14 @@ export default function Home() {
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [alert, setAlert] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
 
   // Refs for audio and scrolling
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const startTimeRef = useRef<number>(0);
+  const recorderState = useRef<'idle' | 'arming' | 'recording'>('idle');
+  const pressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-scroll whenever a message is added
   useEffect(() => {
@@ -33,45 +35,81 @@ export default function Home() {
     }
   }, [messages, isLoading]);
 
+  const showAlert = (message: string, duration = 3000) => {
+    setAlert({ message, visible: true });
+    setTimeout(() => {
+      setAlert({ message: '', visible: false });
+    }, duration);
+  };
+
   // --- Audio Logic ---
-  const startRecording = async () => {
+  const handlePress = () => {
+    if (recorderState.current !== 'idle') return;
+  
+    recorderState.current = 'arming';
+    pressTimeout.current = setTimeout(() => {
+      if (recorderState.current === 'arming') {
+        startRecordingActual();
+      }
+    }, 200); // 200ms hold threshold
+  };
+  
+  const handleRelease = () => {
+    if (pressTimeout.current) {
+      clearTimeout(pressTimeout.current);
+      pressTimeout.current = null;
+    }
+  
+    if (recorderState.current === 'arming') {
+      recorderState.current = 'idle';
+      showAlert("Hold longer to record.");
+    } else if (recorderState.current === 'recording') {
+      stopRecordingActual();
+    }
+  };
+  
+  const startRecordingActual = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      if (recorderState.current !== 'arming') {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+  
+      recorderState.current = 'recording';
+      setIsRecording(true);
+  
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      startTimeRef.current = Date.now();
-
-      mediaRecorder.ondataavailable = (e) => {
+  
+      mediaRecorder.ondataavailable = e => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-
+  
       mediaRecorder.onstop = () => {
-        const duration = Date.now() - startTimeRef.current;
-        if (duration < 500) {
-          alert("Hold longer to record.");
-          return;
-        }
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         handleSend(audioBlob, true);
-        
-        // Stop all tracks to release microphone
         stream.getTracks().forEach(track => track.stop());
+        mediaRecorderRef.current = null;
       };
-
+  
       mediaRecorder.start();
-      setIsRecording(true);
     } catch (err) {
       console.error(err);
-      alert("Please allow microphone access.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+      showAlert("Please allow microphone access.");
+      recorderState.current = 'idle';
       setIsRecording(false);
     }
+  };
+  
+  const stopRecordingActual = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    recorderState.current = 'idle';
+    setIsRecording(false);
   };
 
   // --- Data Sending ---
@@ -134,7 +172,14 @@ export default function Home() {
 
   return (
     <div className="flex h-dvh w-full justify-center">
-      <div className="w-full h-full max-w-md bg-gray-100 flex flex-col shadow-2xl">
+      <div className="w-full h-full max-w-md bg-gray-100 flex flex-col shadow-2xl relative">
+        
+        {/* Alert Bubble */}
+        {alert.visible && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white text-sm px-4 py-2 rounded-full shadow-lg z-20">
+            {alert.message}
+          </div>
+        )}
         
         {/* Header */}
         <header className="bg-blue-600 text-white text-center font-bold py-4 shadow-md z-10 shrink-0">
@@ -159,7 +204,7 @@ export default function Home() {
           {isLoading && (
             <div className="bg-white p-3 rounded-lg shadow-sm max-w-[85%] text-sm text-gray-400 italic flex items-center gap-2">
                <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-               Gemini is processing...
+               Processing...
             </div>
           )}
         </div>
@@ -169,10 +214,11 @@ export default function Home() {
           <div className="flex gap-2 items-center">
             {/* Mic Button */}
             <button
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onTouchStart={startRecording}
-              onTouchEnd={stopRecording}
+              onMouseDown={handlePress}
+              onMouseUp={handleRelease}
+              onTouchStart={handlePress}
+              onTouchEnd={handleRelease}
+              onMouseLeave={handleRelease} // Stop if mouse leaves button area
               className={`p-2.5 rounded-full transition-all flex items-center justify-center min-w-[40px] min-h-[40px] ${
                 isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 text-gray-600'
               }`}
