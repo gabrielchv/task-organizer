@@ -473,7 +473,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend(inputVal, false)}
-              className="flex-1 bg-gray-50 border border-transparent rounded-full px-4 py-3 text-base md:text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-blue-100 focus:ring-2 focus:ring-blue-50 transition-all"
+              className="w-full bg-gray-50 border border-transparent rounded-full px-4 py-3 text-base md:text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-blue-100 focus:ring-2 focus:ring-blue-50 transition-all"
               placeholder={dict.placeholder}
               disabled={isLoading || isRecording}
             />
