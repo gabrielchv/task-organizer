@@ -24,7 +24,16 @@ interface Task {
 interface ApiResponse {
   summary: string;
   tasks: Task[];
+  transcription?: string; // New field from API
   error?: string;
+}
+
+interface Message {
+  id: string; // Added ID for reliable updates
+  type: 'user' | 'bot';
+  content?: string;
+  audioUrl?: string; // For local audio playback
+  transcription?: string; // The text transcription
 }
 
 // --- SKELETON LOADER ---
@@ -44,6 +53,70 @@ function TaskListSkeleton() {
   );
 }
 
+// --- SUB-COMPONENT FOR CHAT MESSAGES ---
+// Handles the toggle state for transcription internally
+const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
+  const [showTranscription, setShowTranscription] = useState(false);
+
+  const isUser = msg.type === 'user';
+
+  return (
+    <div 
+      className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 flex flex-col gap-2 ${
+        isUser 
+          ? 'bg-blue-600 text-white self-end ml-auto rounded-tr-none' 
+          : 'bg-white text-gray-800 self-start border border-gray-100 rounded-tl-none'
+      }`}
+    >
+      {/* Audio Player if URL exists */}
+      {msg.audioUrl && (
+        <div className="w-full min-w-[200px]">
+          <audio 
+            controls 
+            src={msg.audioUrl} 
+            className="w-full h-8 rounded opacity-90 contrast-125 mix-blend-screen"
+            style={{ filter: isUser ? 'invert(1) hue-rotate(180deg)' : 'none' }}
+          />
+        </div>
+      )}
+
+      {/* Transcription Toggle (Only for audio messages that have a transcription) */}
+      {msg.audioUrl && msg.transcription && (
+        <button 
+          onClick={() => setShowTranscription(!showTranscription)}
+          className="text-[10px] uppercase font-bold tracking-wider opacity-70 hover:opacity-100 transition-opacity self-start flex items-center gap-1"
+        >
+          {showTranscription ? (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+              </svg>
+              {dict.hideTranscription}
+            </>
+          ) : (
+             <>
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                  <path fillRule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-1.745-1.745A10.029 10.029 0 0018 10c-1.443-3.75-5.079-6.41-9.336-6.41a9.98 9.98 0 00-4.885 1.28L3.28 2.22zm8.397 8.397a2.5 2.5 0 00-3.535-3.536l3.535 3.536z" clipRule="evenodd" />
+                  <path d="M11.96 13.02L9.432 10.493A2.5 2.5 0 0010 12.5c.66 0 1.284-.255 1.768-.707l.192.227z" />
+                  <path fillRule="evenodd" d="M6.075 4.316A9.957 9.957 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186a9.96 9.96 0 01-2.288 3.323l-1.38-1.38A7.986 7.986 0 0017.5 10c-1.28-3.037-4.25-5.25-7.5-5.25a7.973 7.973 0 00-2.392.365L6.075 4.316z" clipRule="evenodd" />
+               </svg>
+               {dict.showTranscription}
+             </>
+          )}
+        </button>
+      )}
+
+      {/* Text Content / Transcription */}
+      {(!msg.audioUrl || showTranscription) && (
+        <div className={`break-words ${msg.audioUrl && isUser ? 'text-blue-100 italic' : ''}`}>
+           {msg.audioUrl ? (msg.transcription || "Transcribing...") : msg.content}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Home({ params }: { params: Promise<{ lang: string }> }) {
   // Unwrap params using React.use() or await (Next.js 15+ compatible)
   const { lang } = use(params);
@@ -53,12 +126,18 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   
   // --- STATE ---
   const [tasks, setTasks] = useState<Task[]>([]);
-  // Initialize message with dictionary greeting
-  const [messages, setMessages] = useState<{ type: 'user' | 'bot'; content: string }[]>([]);
+  
+  const [messages, setMessages] = useState<Message[]>([]);
   
   // Effect to set initial greeting when dict loads
   useEffect(() => {
-    setMessages([{ type: 'bot', content: dict.greeting }]);
+    // Check if initial greeting already exists to avoid duplicates in strict mode
+    setMessages(prev => {
+        if (prev.length === 0) {
+            return [{ id: 'init', type: 'bot', content: dict.greeting }];
+        }
+        return prev;
+    });
   }, [dict.greeting]);
   
   const [inputVal, setInputVal] = useState("");
@@ -131,7 +210,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       if (saved) setTasks(JSON.parse(saved));
       setIsDataLoaded(true);
     }
-  }, [user, authLoading, dict]); // added dict dependency
+  }, [user, authLoading, dict]); 
 
   // Helper for Guest Mode
   const saveLocal = (newTasks: Task[]) => {
@@ -144,7 +223,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     if (!user) return;
     
     if (!googleAccessToken) {
-      showToast("Please sign in again to enable export"); // Keep generic or add to dict
+      showToast("Please sign in again to enable export"); 
       await signInWithGoogle(); 
       return;
     }
@@ -297,9 +376,20 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const handleSend = async (content: string | Blob, isAudio: boolean) => {
     if (!isAudio && !(content as string).trim()) return;
 
+    const msgId = Date.now().toString();
+
+    // Optimistically add user message
+    // If audio, creating a Blob URL for instant playback
+    let audioUrl = undefined;
+    if (isAudio && content instanceof Blob) {
+        audioUrl = URL.createObjectURL(content);
+    }
+
     setMessages(prev => [...prev, { 
+      id: msgId,
       type: 'user', 
-      content: isAudio ? dict.voiceMessage : (content as string) 
+      content: isAudio ? dict.voiceMessage : (content as string),
+      audioUrl: audioUrl
     }]);
 
     if (!isAudio) setInputVal("");
@@ -308,25 +398,35 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
     try {
       let response;
-      // Pass 'language' to the backend
       if (isAudio) {
         const formData = new FormData();
         formData.append('audio', content as Blob);
         formData.append('currentTasks', JSON.stringify(tasks));
-        formData.append('language', lang); // Sending Language
+        formData.append('language', lang); 
         response = await fetch('/api/process', { method: 'POST', body: formData });
       } else {
         response = await fetch('/api/process', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: content, currentTasks: tasks, language: lang }) // Sending Language
+          body: JSON.stringify({ text: content, currentTasks: tasks, language: lang }) 
         });
       }
 
       const data: ApiResponse = await response.json();
 
+      // Update the audio message with the transcription if available
+      if (isAudio && data.transcription) {
+          setMessages(prev => prev.map(msg => 
+              msg.id === msgId ? { ...msg, transcription: data.transcription } : msg
+          ));
+      }
+
       if (data.tasks) {
-        setMessages(prev => [...prev, { type: 'bot', content: data.summary || dict.updated }]);
+        setMessages(prev => [...prev, { 
+            id: Date.now().toString() + 'bot',
+            type: 'bot', 
+            content: data.summary || dict.updated 
+        }]);
         setIsLoading(false); 
 
         if (user) {
@@ -335,14 +435,22 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
           saveLocal(data.tasks);
         }
       } else {
-        setMessages(prev => [...prev, { type: 'bot', content: dict.error }]);
+        setMessages(prev => [...prev, { 
+            id: Date.now().toString() + 'err',
+            type: 'bot', 
+            content: dict.error 
+        }]);
         setIsLoading(false);
       }
 
     } catch (error) {
       console.error("HandleSend Error:", error);
       showToast("Error connecting to server.");
-      setMessages(prev => [...prev, { type: 'bot', content: "Connection error." }]);
+      setMessages(prev => [...prev, { 
+          id: 'err-conn',
+          type: 'bot', 
+          content: "Connection error." 
+      }]);
       setIsLoading(false);
     }
   };
@@ -366,17 +474,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
         {/* CHAT AREA */}
         <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 scroll-smooth">
-          {messages.map((msg, idx) => (
-            <div 
-              key={idx} 
-              className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 ${
-                msg.type === 'user' 
-                  ? 'bg-blue-600 text-white self-end ml-auto rounded-tr-none' 
-                  : 'bg-white text-gray-800 self-start border border-gray-100 rounded-tl-none'
-              }`}
-            >
-              {msg.content}
-            </div>
+          {messages.map((msg) => (
+             <ChatMessage key={msg.id} msg={msg} dict={dict} />
           ))}
           {isLoading && (
             <div className="flex items-center gap-2 text-xs text-gray-400 ml-2 animate-in fade-in">
@@ -415,7 +514,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
             
             <div className="divide-y divide-gray-50">
               {tasks.map((task) => (
-                // 1. Mudado 'items-center' para 'items-start'
                 <div key={task.id} className="p-3 pl-4 flex items-start gap-3 hover:bg-gray-50 transition-colors group">
                   <button 
                     onClick={() => toggleTask(task.id)}
@@ -432,14 +530,12 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                     )}
                   </button>
                   
-                  {/* 2. Removido 'truncate', adicionado 'break-words' */}
                   <span className={`text-sm flex-1 break-words transition-all duration-200 ${task.status === 'completed' ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-800'}`}>
                     {task.title}
                   </span>
 
                   <button 
                     onClick={() => deleteTask(task.id)}
-                    // 3. Adicionado '-mt-1.5' para alinhar o ícone com a primeira linha de texto
                     className="text-gray-300 hover:text-red-500 p-2 -mt-1.5 transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
