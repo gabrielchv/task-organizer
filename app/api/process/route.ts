@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// UPDATED PROMPT: Much stricter about persistence
+// UPDATED PROMPT: Added Rule 7 to ban emojis
 const SYSTEM_INSTRUCTION = `
 You are a Task Helper AI.
 Your goal is to manage a list of tasks based on user commands.
@@ -16,6 +16,7 @@ CRITICAL RULES FOR STATE MANAGEMENT:
 4. If the user adds a task, your output must be: [All Existing Tasks] + [New Task].
 5. If the user updates a task, return the full list with that specific task modified.
 6. If the user marks a task as done, change its status to 'completed' (do not delete it unless asked).
+7. DO NOT use emojis in the summary or any part of the response.
 
 Action Logic:
 - Analyze "User Input" vs "Current Tasks".

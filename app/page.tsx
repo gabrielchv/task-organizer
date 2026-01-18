@@ -26,6 +26,23 @@ interface ApiResponse {
   error?: string;
 }
 
+// --- SKELETON LOADER ---
+function TaskListSkeleton() {
+  return (
+    <div className="shrink-0 bg-white border-t border-gray-200 p-4 space-y-3 animate-pulse z-10">
+      <div className="h-3 bg-gray-200 rounded w-1/4 mb-4"></div>
+      <div className="flex items-center gap-3">
+        <div className="w-5 h-5 bg-gray-200 rounded"></div>
+        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="w-5 h-5 bg-gray-200 rounded"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
   
@@ -39,6 +56,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -46,34 +64,69 @@ export default function Home() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
 
+  // --- MIGRATION LOGIC (Guest -> Cloud) ---
+  const migrateGuestTasks = async (userId: string) => {
+    const savedGuest = localStorage.getItem("guest_tasks");
+    if (!savedGuest) return;
+
+    try {
+      const localTasks: Task[] = JSON.parse(savedGuest);
+      if (localTasks.length === 0) return;
+
+      console.log(`[Migration] Found ${localTasks.length} guest tasks. Migrating...`);
+      
+      const batch = writeBatch(db);
+      const userTasksRef = collection(db, "users", userId, "tasks");
+
+      localTasks.forEach(task => {
+        const docRef = doc(userTasksRef, task.id); 
+        batch.set(docRef, task, { merge: true });
+      });
+
+      await batch.commit();
+      
+      localStorage.removeItem("guest_tasks");
+      showToast("Local tasks synced to cloud!");
+      console.log("[Migration] Success.");
+
+    } catch (e) {
+      console.error("[Migration] Failed:", e);
+    }
+  };
+
   // --- DATA SYNC LOGIC ---
 
   useEffect(() => {
     if (authLoading) return;
 
     if (user) {
-      // 1. LOGGED IN: Listen to Firestore
+      // 1. Check for migration FIRST
+      migrateGuestTasks(user.uid);
+
+      // 2. Then Listen to Firestore
       const q = query(collection(db, "users", user.uid, "tasks"));
-      
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const dbTasks = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Task[];
         
-        console.log("🔥 [Firestore] Loaded tasks:", dbTasks.length);
         setTasks(dbTasks);
+        setIsDataLoaded(true);
       }, (error) => {
-        console.error("🔥 [Firestore] Error:", error);
+        console.error("[Firestore] Error:", error);
         if (error.code === 'permission-denied') {
-          showToast("❌ Database Permission Denied. Check Rules.");
+          showToast("Database Permission Denied.");
         }
+        setIsDataLoaded(true);
       });
       return () => unsubscribe();
+
     } else {
-      // 2. GUEST: Load from LocalStorage
+      // 3. GUEST: Load from LocalStorage
       const saved = localStorage.getItem("guest_tasks");
       if (saved) setTasks(JSON.parse(saved));
+      setIsDataLoaded(true);
     }
   }, [user, authLoading]);
 
@@ -88,10 +141,9 @@ export default function Home() {
   const toggleTask = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
-    
     const newStatus = task.status === 'completed' ? 'pending' : 'completed';
 
-    // Optimistic UI Update
+    // Optimistic UI
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
 
     if (user) {
@@ -99,7 +151,6 @@ export default function Home() {
         await setDoc(doc(db, "users", user.uid, "tasks", taskId), { status: newStatus }, { merge: true });
       } catch (e) {
         console.error("Error updating task:", e);
-        showToast("❌ Failed to save update");
       }
     } else {
       const newTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
@@ -108,7 +159,6 @@ export default function Home() {
   };
 
   const deleteTask = async (taskId: string) => {
-    // Optimistic UI Update
     setTasks(prev => prev.filter(t => t.id !== taskId));
 
     if (user) {
@@ -116,7 +166,6 @@ export default function Home() {
         await deleteDoc(doc(db, "users", user.uid, "tasks", taskId));
       } catch (e) {
         console.error("Error deleting task:", e);
-        showToast("❌ Failed to delete task");
       }
     } else {
       saveLocal(tasks.filter(t => t.id !== taskId));
@@ -125,12 +174,10 @@ export default function Home() {
 
   const syncFirestoreFromAI = async (newTasksState: Task[]) => {
     if (!user) return;
-    
     try {
       const batch = writeBatch(db);
       const userTasksRef = collection(db, "users", user.uid, "tasks");
 
-      // 1. Delete tasks missing from AI response (ONLY if we had tasks to begin with)
       const newIds = new Set(newTasksState.map(t => t.id));
       tasks.forEach(currentTask => {
         if (!newIds.has(currentTask.id)) {
@@ -138,21 +185,14 @@ export default function Home() {
         }
       });
 
-      // 2. Add/Update tasks from AI response
       newTasksState.forEach(newTask => {
         const docRef = doc(userTasksRef, newTask.id);
         batch.set(docRef, newTask, { merge: true });
       });
 
       await batch.commit();
-      console.log("✅ [Sync] Saved to Firestore successfully");
     } catch (e: any) {
-      console.error("❌ [Sync] Save Failed:", e);
-      if (e.code === 'permission-denied') {
-         showToast("❌ Cloud Save Failed: Permission Denied");
-      } else {
-         showToast("❌ Cloud Save Failed");
-      }
+      console.error("[Sync] Save Failed:", e);
     }
   };
 
@@ -165,7 +205,10 @@ export default function Home() {
 
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
     }
   }, [messages, isLoading]);
 
@@ -185,7 +228,7 @@ export default function Home() {
         stream.getTracks().forEach(track => track.stop());
         const duration = Date.now() - startTimeRef.current;
         if (duration < 500) {
-          showToast("⚠️ Hold to record audio");
+          showToast("Hold to record audio");
           setIsRecording(false);
           return;
         }
@@ -197,7 +240,7 @@ export default function Home() {
       setIsRecording(true);
     } catch (err) {
       console.error(err);
-      showToast("❌ Microphone access denied");
+      showToast("Microphone access denied");
       setIsRecording(false);
     }
   };
@@ -213,7 +256,7 @@ export default function Home() {
 
     setMessages(prev => [...prev, { 
       type: 'user', 
-      content: isAudio ? "🎤 Voice message" : (content as string) 
+      content: isAudio ? "Voice message" : (content as string) 
     }]);
 
     if (!isAudio) setInputVal("");
@@ -242,7 +285,6 @@ export default function Home() {
         setIsLoading(false); 
 
         if (user) {
-          // We wait for the sync to ensure data is saved
           await syncFirestoreFromAI(data.tasks);
         } else {
           saveLocal(data.tasks);
@@ -261,11 +303,14 @@ export default function Home() {
   };
 
   return (
-    <div className="fixed inset-0 flex justify-center bg-[#1a1a1a] overflow-hidden overscroll-none font-sans">
-      <div className="w-full h-full max-w-md bg-gray-50 flex flex-col shadow-2xl relative">
+    // UPDATED: Added items-center
+    <div className="fixed inset-0 flex justify-center items-center bg-[#1a1a1a] overflow-hidden overscroll-none font-sans">
+      
+      {/* UPDATED: Added md:h-[90vh], md:rounded-2xl, and overflow-hidden */}
+      <div className="w-full h-full md:h-[90vh] md:rounded-2xl overflow-hidden max-w-md bg-gray-50 flex flex-col shadow-2xl relative">
         
         {/* HEADER */}
-        <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
+        <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-10 shadow-sm min-h-[60px]">
           <h1 className="font-bold text-gray-800 text-lg tracking-tight">Task Helper AI</h1>
           <AuthButton />
         </header>
@@ -278,11 +323,11 @@ export default function Home() {
         )}
 
         {/* CHAT AREA */}
-        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 scroll-smooth">
           {messages.map((msg, idx) => (
             <div 
               key={idx} 
-              className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
+              className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 ${
                 msg.type === 'user' 
                   ? 'bg-blue-600 text-white self-end ml-auto rounded-tr-none' 
                   : 'bg-white text-gray-800 self-start border border-gray-100 rounded-tl-none'
@@ -292,7 +337,7 @@ export default function Home() {
             </div>
           ))}
           {isLoading && (
-            <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
+            <div className="flex items-center gap-2 text-xs text-gray-400 ml-2 animate-in fade-in">
                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
@@ -300,9 +345,12 @@ export default function Home() {
           )}
         </div>
 
+        {/* LOADING STATE FOR LIST */}
+        {!isDataLoaded && <TaskListSkeleton />}
+
         {/* TASK LIST AREA */}
-        {tasks.length > 0 && (
-          <div className="shrink-0 max-h-[35%] overflow-y-auto bg-white border-t border-gray-200 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)] z-10">
+        {isDataLoaded && tasks.length > 0 && (
+          <div className="shrink-0 max-h-[35%] overflow-y-auto bg-white border-t border-gray-200 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)] z-10 animate-in slide-in-from-bottom-5 duration-300">
             <div className="p-2 bg-gray-50 border-b border-gray-100 sticky top-0 flex justify-between items-center px-4">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 {user ? "Cloud List" : "Local List"} ({tasks.length})
@@ -314,7 +362,7 @@ export default function Home() {
                 <div key={task.id} className="p-3 pl-4 flex items-center gap-3 hover:bg-gray-50 transition-colors group">
                   <button 
                     onClick={() => toggleTask(task.id)}
-                    className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${
+                    className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all duration-200 ${
                       task.status === 'completed' 
                         ? 'bg-green-500 border-green-500 hover:bg-green-600' 
                         : 'border-gray-300 hover:border-blue-500'
@@ -327,7 +375,7 @@ export default function Home() {
                     )}
                   </button>
                   
-                  <span className={`text-sm flex-1 truncate ${task.status === 'completed' ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-800'}`}>
+                  <span className={`text-sm flex-1 truncate transition-all duration-200 ${task.status === 'completed' ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-800'}`}>
                     {task.title}
                   </span>
 
