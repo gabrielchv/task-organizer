@@ -4,28 +4,32 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// Instructions in English to ensure English responses
+// UPDATED PROMPT: Much stricter about persistence
 const SYSTEM_INSTRUCTION = `
 You are a Task Helper AI.
 Your goal is to manage a list of tasks based on user commands.
 
-Rules:
-1. Analyze the "Current Tasks" and the "User Input".
-2. Decide whether to ADD, REMOVE, UPDATE (change title), or COMPLETE/UNCOMPLETE tasks.
-3. Keep tasks that were not affected.
-4. If the user asks to remove/delete, remove it from the list.
-5. If the user says they did something, mark status as 'completed'.
-6. OUTPUT ONLY VALID JSON.
+CRITICAL RULES FOR STATE MANAGEMENT:
+1. You will receive the "Current Tasks" list.
+2. You MUST return the COMPLETE list of tasks in your output. 
+3. DO NOT OMIT existing tasks unless the user explicitly asks to delete/remove them.
+4. If the user adds a task, your output must be: [All Existing Tasks] + [New Task].
+5. If the user updates a task, return the full list with that specific task modified.
+6. If the user marks a task as done, change its status to 'completed' (do not delete it unless asked).
 
-Output Format (JSON):
+Action Logic:
+- Analyze "User Input" vs "Current Tasks".
+- Generate a unique ID for new tasks (e.g., 't-' + random short string).
+- Maintain original IDs for existing tasks.
+
+Output Format (JSON ONLY):
 {
-  "summary": "A short, natural sentence explaining what you did (e.g., 'Added buy milk' or 'Marked X as done'). Use first person ('I').",
+  "summary": "A short, natural sentence explaining the change (e.g., 'Added buy milk' or 'Updated list').",
   "tasks": [
-    { "id": "keep_original_id_if_exists", "title": "Task title", "status": "pending" | "completed" }
+    { "id": "existing_id", "title": "Existing task", "status": "pending" },
+    { "id": "new_id", "title": "New task", "status": "pending" }
   ]
 }
-
-For new tasks, generate a short, unique ID (e.g., 't-123').
 `;
 
 export async function POST(req: NextRequest) {
@@ -35,7 +39,6 @@ export async function POST(req: NextRequest) {
     let userText = "";
     let currentTasks = [];
 
-    // Handle Multipart (Audio) or JSON (Text)
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const audioFile = formData.get("audio") as File;
@@ -50,10 +53,9 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await audioFile.arrayBuffer();
       const base64Audio = Buffer.from(arrayBuffer).toString("base64");
 
-      // Multimodal prompt
       const result = await model.generateContent([
         SYSTEM_INSTRUCTION,
-        `Current Tasks: ${JSON.stringify(currentTasks)}`,
+        `Current Tasks (DO NOT DELETE THESE UNLESS ASKED): ${JSON.stringify(currentTasks)}`,
         {
           inlineData: {
             mimeType: "audio/webm",
@@ -69,14 +71,13 @@ export async function POST(req: NextRequest) {
       currentTasks = body.currentTasks || [];
       
       const prompt = `${SYSTEM_INSTRUCTION}
-      Current Tasks: ${JSON.stringify(currentTasks)}
+      Current Tasks (DO NOT DELETE THESE UNLESS ASKED): ${JSON.stringify(currentTasks)}
       User Input: ${userText}`;
       
       const result = await model.generateContent(prompt);
       userText = result.response.text();
     }
 
-    // JSON Cleanup
     const jsonMatch = userText.match(/\{[\s\S]*\}/);
     const cleanedJson = jsonMatch ? jsonMatch[0] : userText;
     const parsedData = JSON.parse(cleanedJson);

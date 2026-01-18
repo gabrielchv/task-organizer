@@ -1,6 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "./context/AuthContext";
+import AuthButton from "./components/AuthButton";
+import { db } from "./lib/firebase";
+import { 
+  collection, 
+  query, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  writeBatch 
+} from "firebase/firestore";
 
 interface Task {
   id: string;
@@ -15,6 +27,8 @@ interface ApiResponse {
 }
 
 export default function Home() {
+  const { user, loading: authLoading } = useAuth();
+  
   // --- STATE ---
   const [tasks, setTasks] = useState<Task[]>([]);
   const [messages, setMessages] = useState<{ type: 'user' | 'bot'; content: string }[]>([
@@ -24,8 +38,6 @@ export default function Home() {
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  
-  // Custom Alert State
   const [toast, setToast] = useState<string | null>(null);
 
   // Refs
@@ -34,40 +46,132 @@ export default function Home() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
 
-  // Auto-scroll chat
+  // --- DATA SYNC LOGIC ---
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (user) {
+      // 1. LOGGED IN: Listen to Firestore
+      const q = query(collection(db, "users", user.uid, "tasks"));
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const dbTasks = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Task[];
+        
+        console.log("🔥 [Firestore] Loaded tasks:", dbTasks.length);
+        setTasks(dbTasks);
+      }, (error) => {
+        console.error("🔥 [Firestore] Error:", error);
+        if (error.code === 'permission-denied') {
+          showToast("❌ Database Permission Denied. Check Rules.");
+        }
+      });
+      return () => unsubscribe();
+    } else {
+      // 2. GUEST: Load from LocalStorage
+      const saved = localStorage.getItem("guest_tasks");
+      if (saved) setTasks(JSON.parse(saved));
+    }
+  }, [user, authLoading]);
+
+  // Helper for Guest Mode
+  const saveLocal = (newTasks: Task[]) => {
+    setTasks(newTasks);
+    localStorage.setItem("guest_tasks", JSON.stringify(newTasks));
+  };
+
+  // --- ACTIONS ---
+
+  const toggleTask = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+
+    // Optimistic UI Update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+
+    if (user) {
+      try {
+        await setDoc(doc(db, "users", user.uid, "tasks", taskId), { status: newStatus }, { merge: true });
+      } catch (e) {
+        console.error("Error updating task:", e);
+        showToast("❌ Failed to save update");
+      }
+    } else {
+      const newTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+      saveLocal(newTasks as Task[]);
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    // Optimistic UI Update
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+
+    if (user) {
+      try {
+        await deleteDoc(doc(db, "users", user.uid, "tasks", taskId));
+      } catch (e) {
+        console.error("Error deleting task:", e);
+        showToast("❌ Failed to delete task");
+      }
+    } else {
+      saveLocal(tasks.filter(t => t.id !== taskId));
+    }
+  };
+
+  const syncFirestoreFromAI = async (newTasksState: Task[]) => {
+    if (!user) return;
+    
+    try {
+      const batch = writeBatch(db);
+      const userTasksRef = collection(db, "users", user.uid, "tasks");
+
+      // 1. Delete tasks missing from AI response (ONLY if we had tasks to begin with)
+      const newIds = new Set(newTasksState.map(t => t.id));
+      tasks.forEach(currentTask => {
+        if (!newIds.has(currentTask.id)) {
+          batch.delete(doc(userTasksRef, currentTask.id));
+        }
+      });
+
+      // 2. Add/Update tasks from AI response
+      newTasksState.forEach(newTask => {
+        const docRef = doc(userTasksRef, newTask.id);
+        batch.set(docRef, newTask, { merge: true });
+      });
+
+      await batch.commit();
+      console.log("✅ [Sync] Saved to Firestore successfully");
+    } catch (e: any) {
+      console.error("❌ [Sync] Save Failed:", e);
+      if (e.code === 'permission-denied') {
+         showToast("❌ Cloud Save Failed: Permission Denied");
+      } else {
+         showToast("❌ Cloud Save Failed");
+      }
+    }
+  };
+
+  // --- HANDLERS ---
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
 
-  // Toast Helper
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // --- LOCAL TASK MANAGEMENT ---
-  
-  const toggleTask = (taskId: string) => {
-    setTasks(prev => prev.map(t => 
-      t.id === taskId 
-        ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } 
-        : t
-    ));
-  };
-
-  const deleteTask = (taskId: string) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-  };
-
-  // --- AUDIO LOGIC ---
-
   const startRecording = async () => {
     try {
-      // 1. Check permissions first to avoid "stuck" UI if denied
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
       startTimeRef.current = Date.now();
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -78,25 +182,19 @@ export default function Home() {
       };
 
       mediaRecorder.onstop = () => {
-        // Stop all tracks to release mic
         stream.getTracks().forEach(track => track.stop());
-
         const duration = Date.now() - startTimeRef.current;
-        
-        // 2. Logic: Only process if held long enough (> 500ms)
         if (duration < 500) {
           showToast("⚠️ Hold to record audio");
           setIsRecording(false);
           return;
         }
-
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         handleSend(audioBlob, true);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
-
     } catch (err) {
       console.error(err);
       showToast("❌ Microphone access denied");
@@ -105,22 +203,14 @@ export default function Home() {
   };
 
   const stopRecording = () => {
-    // Only stop if it's actually recording
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
-    // Note: We don't set setIsRecording(false) here immediately because
-    // onstop handler above needs to run first to decide if it was a valid hold or just a click.
-    // However, for visual feedback, we can reset it in the onstop or handleSend.
   };
 
-  // --- API COMMUNICATION ---
-
   const handleSend = async (content: string | Blob, isAudio: boolean) => {
-    // If text is empty, ignore
     if (!isAudio && !(content as string).trim()) return;
 
-    // UI Update
     setMessages(prev => [...prev, { 
       type: 'user', 
       content: isAudio ? "🎤 Voice message" : (content as string) 
@@ -128,12 +218,10 @@ export default function Home() {
 
     if (!isAudio) setInputVal("");
     setIsLoading(true);
-    if (isAudio) setIsRecording(false); // Reset recording state explicitly here
+    if (isAudio) setIsRecording(false);
 
     try {
       let response;
-      
-      // Sending current tasks allows the LLM to modify the state correctly
       if (isAudio) {
         const formData = new FormData();
         formData.append('audio', content as Blob);
@@ -143,27 +231,31 @@ export default function Home() {
         response = await fetch('/api/process', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            text: content,
-            currentTasks: tasks 
-          }) 
+          body: JSON.stringify({ text: content, currentTasks: tasks }) 
         });
       }
 
       const data: ApiResponse = await response.json();
 
       if (data.tasks) {
-        setTasks(data.tasks);
         setMessages(prev => [...prev, { type: 'bot', content: data.summary || "List updated." }]);
+        setIsLoading(false); 
+
+        if (user) {
+          // We wait for the sync to ensure data is saved
+          await syncFirestoreFromAI(data.tasks);
+        } else {
+          saveLocal(data.tasks);
+        }
       } else {
         setMessages(prev => [...prev, { type: 'bot', content: "I didn't understand. Try again." }]);
+        setIsLoading(false);
       }
 
     } catch (error) {
-      console.error(error);
+      console.error("HandleSend Error:", error);
       showToast("Error connecting to server.");
       setMessages(prev => [...prev, { type: 'bot', content: "Connection error." }]);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -175,9 +267,10 @@ export default function Home() {
         {/* HEADER */}
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
           <h1 className="font-bold text-gray-800 text-lg tracking-tight">Task Helper AI</h1>
+          <AuthButton />
         </header>
 
-        {/* CUSTOM ALERT (TOAST) */}
+        {/* TOAST */}
         {toast && (
           <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-md z-50 animate-bounce">
             {toast}
@@ -198,7 +291,6 @@ export default function Home() {
               {msg.content}
             </div>
           ))}
-          
           {isLoading && (
             <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
@@ -212,14 +304,14 @@ export default function Home() {
         {tasks.length > 0 && (
           <div className="shrink-0 max-h-[35%] overflow-y-auto bg-white border-t border-gray-200 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)] z-10">
             <div className="p-2 bg-gray-50 border-b border-gray-100 sticky top-0 flex justify-between items-center px-4">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your List ({tasks.length})</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                {user ? "Cloud List" : "Local List"} ({tasks.length})
+              </span>
             </div>
             
             <div className="divide-y divide-gray-50">
               {tasks.map((task) => (
                 <div key={task.id} className="p-3 pl-4 flex items-center gap-3 hover:bg-gray-50 transition-colors group">
-                  
-                  {/* Toggle Button */}
                   <button 
                     onClick={() => toggleTask(task.id)}
                     className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${
@@ -235,16 +327,13 @@ export default function Home() {
                     )}
                   </button>
                   
-                  {/* Title */}
                   <span className={`text-sm flex-1 truncate ${task.status === 'completed' ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-800'}`}>
                     {task.title}
                   </span>
 
-                  {/* Delete Button */}
                   <button 
                     onClick={() => deleteTask(task.id)}
                     className="text-gray-300 hover:text-red-500 p-2 transition-colors"
-                    aria-label="Delete"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -256,10 +345,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* INPUT & CREDITS AREA */}
+        {/* INPUT & CREDITS */}
         <div className="bg-white border-t border-gray-200 shrink-0 safe-area-bottom z-20 flex flex-col">
-          
-          {/* Input Controls */}
           <div className="p-4 flex gap-2 items-center">
             <button
               onMouseDown={startRecording}
@@ -297,21 +384,12 @@ export default function Home() {
               </svg>
             </button>
           </div>
-
-          {/* CREDITS FOOTER */}
           <div className="pb-2 text-center">
-             <a 
-               href="https://www.linkedin.com/in/gabriel-chv" 
-               target="_blank" 
-               rel="noreferrer"
-               className="text-[10px] text-gray-400 uppercase tracking-widest font-bold hover:text-blue-500 transition-colors"
-             >
+             <a href="https://www.linkedin.com/in/gabriel-chv" target="_blank" rel="noreferrer" className="text-[10px] text-gray-400 uppercase tracking-widest font-bold hover:text-blue-500 transition-colors">
                  Gabriel Chaves | LinkedIn
              </a>
           </div>
-
         </div>
-
       </div>
     </div>
   );
