@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, use } from "react";
+import { createPortal } from "react-dom"; // Import createPortal
 import { useAuth } from "../context/AuthContext";
 import AuthButton from "../components/AuthButton";
 import { db } from "../lib/firebase";
@@ -116,6 +117,7 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
 export default function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = use(params);
   const dict = getDictionary(lang);
+  
   const { user, googleAccessToken, signInWithGoogle, loading: authLoading } = useAuth();
   
   // --- STATE ---
@@ -130,6 +132,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   // Menu State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [canShare, setCanShare] = useState(false);
+  // NEW: State for menu position
+  const [menuPosition, setMenuPosition] = useState<{ bottom: number, right: number } | null>(null);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -137,6 +141,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
   const menuRef = useRef<HTMLDivElement>(null);
+  // NEW: Ref for the dropdown itself (for click outside logic with Portal)
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMessages(prev => {
@@ -151,16 +157,39 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     setCanShare(typeof navigator !== 'undefined' && !!navigator.share);
   }, []);
 
-  // Close menu when clicking outside
+  // NEW: Updated Toggle Logic
+  const toggleMenu = () => {
+    if (isMenuOpen) {
+      setIsMenuOpen(false);
+    } else {
+      if (menuRef.current) {
+        const rect = menuRef.current.getBoundingClientRect();
+        setMenuPosition({
+          // Position the BOTTOM of the menu at the TOP of the button (+ some padding)
+          bottom: window.innerHeight - rect.top + 4, 
+          right: window.innerWidth - rect.right
+        });
+      }
+      setIsMenuOpen(true);
+    }
+  };
+
+  // NEW: Updated Click Outside Logic (Checks both button and portal dropdown)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (
+        isMenuOpen &&
+        menuRef.current && 
+        !menuRef.current.contains(event.target as Node) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isMenuOpen]);
 
   // --- MIGRATION LOGIC (Guest -> Cloud) ---
   const migrateGuestTasks = async (userId: string) => {
@@ -267,7 +296,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     if (!user) return;
     
     if (!googleAccessToken) {
-      showToast("Please sign in again"); 
+      showToast(dict.signIn + " again"); 
       await signInWithGoogle(); 
       return;
     }
@@ -537,20 +566,27 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                 {user ? dict.listTitleCloud : dict.listTitleLocal} ({tasks.length})
               </span>
               
-              {/* MENU BUTTON & DROPDOWN */}
+              {/* MENU BUTTON & DROPDOWN (USING PORTAL) */}
               <div className="relative" ref={menuRef}>
                 <button 
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  onClick={toggleMenu}
                   className="p-1 rounded-full hover:bg-gray-200 transition-colors text-gray-500"
-                  title={dict.menuTitle}
+                  title="Options"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                   </svg>
                 </button>
 
-                {isMenuOpen && (
-                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                {isMenuOpen && menuPosition && createPortal(
+                  <div 
+                    ref={dropdownRef}
+                    className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                    style={{ 
+                      bottom: menuPosition.bottom, 
+                      right: menuPosition.right 
+                    }}
+                  >
                     
                     {/* Share Button (Web Share API) */}
                     {canShare && (
@@ -582,7 +618,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                         {dict.export}
                       </button>
                     )}
-                  </div>
+                  </div>,
+                  document.body // Target for Portal
                 )}
               </div>
             </div>

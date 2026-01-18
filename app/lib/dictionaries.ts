@@ -19,8 +19,7 @@ const dictionaries = {
     signIn: "Sign In with Google",
     placeholder: "Type a task or ask a question...",
     showTranscription: "Show Text",
-    hideTranscription: "Hide Text",
-    menuTitle: "Options"
+    hideTranscription: "Hide Text"
   },
   'pt-BR': {
     title: "Organizador de Tarefas",
@@ -42,8 +41,7 @@ const dictionaries = {
     signIn: "Entrar com Google",
     placeholder: "Digite uma tarefa ou faça uma pergunta...",
     showTranscription: "Ver Transcrição",
-    hideTranscription: "Ocultar Transcrição",
-    menuTitle: "Opções"
+    hideTranscription: "Ocultar Transcrição"
   },
 };
 
