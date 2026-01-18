@@ -5,6 +5,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 // --- SYSTEM PROMPTS (By Language) ---
+// UPDATED: Added strict JSON schema for tasks (id, title, status)
 
 const PROMPTS = {
   'en-US': `
@@ -21,8 +22,15 @@ const PROMPTS = {
     2. Add new tasks to existing list.
     3. 'summary': Conversational response in ENGLISH.
     4. NO emojis.
+    5. USE 'title' for the task text.
     
-    Output JSON: { "summary": "...", "tasks": [...] }
+    Output JSON Format:
+    {
+      "summary": "String response",
+      "tasks": [
+        { "id": "String", "title": "String", "status": "pending" | "completed" }
+      ]
+    }
   `,
   'pt-BR': `
     Você é o Task Helper AI, um assistente amigável.
@@ -38,8 +46,15 @@ const PROMPTS = {
     2. Adicione novas tarefas à lista existente.
     3. 'summary': Resposta conversacional em PORTUGUÊS.
     4. NÃO use emojis.
+    5. USE 'title' para o texto da tarefa.
     
-    Output JSON: { "summary": "...", "tasks": [...] }
+    Formato JSON de Saída:
+    {
+      "summary": "Resposta em texto",
+      "tasks": [
+        { "id": "String", "title": "String", "status": "pending" | "completed" }
+      ]
+    }
   `
 };
 
