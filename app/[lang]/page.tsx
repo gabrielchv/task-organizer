@@ -24,16 +24,16 @@ interface Task {
 interface ApiResponse {
   summary: string;
   tasks: Task[];
-  transcription?: string; // New field from API
+  transcription?: string;
   error?: string;
 }
 
 interface Message {
-  id: string; // Added ID for reliable updates
+  id: string;
   type: 'user' | 'bot';
   content?: string;
-  audioUrl?: string; // For local audio playback
-  transcription?: string; // The text transcription
+  audioUrl?: string;
+  transcription?: string;
 }
 
 // --- SKELETON LOADER ---
@@ -54,7 +54,6 @@ function TaskListSkeleton() {
 }
 
 // --- SUB-COMPONENT FOR CHAT MESSAGES ---
-// Handles the toggle state for transcription internally
 const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
   const [showTranscription, setShowTranscription] = useState(false);
 
@@ -68,7 +67,6 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
           : 'bg-white text-gray-800 self-start border border-gray-100 rounded-tl-none'
       }`}
     >
-      {/* Audio Player if URL exists */}
       {msg.audioUrl && (
         <div className="w-full min-w-[200px]">
           <audio 
@@ -80,7 +78,6 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
         </div>
       )}
 
-      {/* Transcription Toggle (Only for audio messages that have a transcription) */}
       {msg.audioUrl && msg.transcription && (
         <button 
           onClick={() => setShowTranscription(!showTranscription)}
@@ -107,7 +104,6 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
         </button>
       )}
 
-      {/* Text Content / Transcription */}
       {(!msg.audioUrl || showTranscription) && (
         <div className={`break-words ${msg.audioUrl && isUser ? 'text-blue-100 italic' : ''}`}>
            {msg.audioUrl ? (msg.transcription || "Transcribing...") : msg.content}
@@ -118,20 +114,31 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
 };
 
 export default function Home({ params }: { params: Promise<{ lang: string }> }) {
-  // Unwrap params using React.use() or await (Next.js 15+ compatible)
   const { lang } = use(params);
   const dict = getDictionary(lang);
-
   const { user, googleAccessToken, signInWithGoogle, loading: authLoading } = useAuth();
   
   // --- STATE ---
   const [tasks, setTasks] = useState<Task[]>([]);
-  
   const [messages, setMessages] = useState<Message[]>([]);
+  const [inputVal, setInputVal] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // Effect to set initial greeting when dict loads
+  // Menu State
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [canShare, setCanShare] = useState(false);
+
+  // Refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const startTimeRef = useRef<number>(0);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    // Check if initial greeting already exists to avoid duplicates in strict mode
     setMessages(prev => {
         if (prev.length === 0) {
             return [{ id: 'init', type: 'bot', content: dict.greeting }];
@@ -139,18 +146,21 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         return prev;
     });
   }, [dict.greeting]);
-  
-  const [inputVal, setInputVal] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-  // Refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const startTimeRef = useRef<number>(0);
+  useEffect(() => {
+    setCanShare(typeof navigator !== 'undefined' && !!navigator.share);
+  }, []);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // --- MIGRATION LOGIC (Guest -> Cloud) ---
   const migrateGuestTasks = async (userId: string) => {
@@ -180,7 +190,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   };
 
   // --- DATA SYNC LOGIC ---
-
   useEffect(() => {
     if (authLoading) return;
 
@@ -212,18 +221,53 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   }, [user, authLoading, dict]); 
 
-  // Helper for Guest Mode
   const saveLocal = (newTasks: Task[]) => {
     setTasks(newTasks);
     localStorage.setItem("guest_tasks", JSON.stringify(newTasks));
   };
 
-  // --- EXPORT TO GOOGLE TASKS ---
+  // --- EXPORT & SHARE LOGIC ---
+  
+  const getFormattedList = () => {
+    return tasks.map(t => 
+      `[${t.status === 'completed' ? 'x' : ' '}] ${t.title}`
+    ).join('\n');
+  };
+
+  const handleCopyList = async () => {
+    const text = getFormattedList();
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(dict.listCopied);
+    } catch (err) {
+      showToast(dict.error);
+    }
+    setIsMenuOpen(false);
+  };
+
+  const handleShareList = async () => {
+    const text = getFormattedList();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: dict.title,
+          text: text,
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+             showToast(dict.shareError);
+        }
+      }
+    }
+    setIsMenuOpen(false);
+  };
+
   const exportToGoogleTasks = async () => {
+    setIsMenuOpen(false);
     if (!user) return;
     
     if (!googleAccessToken) {
-      showToast("Please sign in again to enable export"); 
+      showToast("Please sign in again"); 
       await signInWithGoogle(); 
       return;
     }
@@ -265,7 +309,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     if (!task) return;
     const newStatus = task.status === 'completed' ? 'pending' : 'completed';
 
-    // Optimistic UI
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
 
     if (user) {
@@ -378,8 +421,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
     const msgId = Date.now().toString();
 
-    // Optimistically add user message
-    // If audio, creating a Blob URL for instant playback
     let audioUrl = undefined;
     if (isAudio && content instanceof Blob) {
         audioUrl = URL.createObjectURL(content);
@@ -414,7 +455,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
       const data: ApiResponse = await response.json();
 
-      // Update the audio message with the transcription if available
       if (isAudio && data.transcription) {
           setMessages(prev => prev.map(msg => 
               msg.id === msgId ? { ...msg, transcription: data.transcription } : msg
@@ -467,7 +507,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
         {/* TOAST */}
         {toast && (
-          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-md z-50 animate-bounce">
+          <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-md z-50 animate-bounce whitespace-nowrap">
             {toast}
           </div>
         )}
@@ -497,19 +537,54 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                 {user ? dict.listTitleCloud : dict.listTitleLocal} ({tasks.length})
               </span>
               
-              {/* EXPORT BUTTON */}
-              {user && (
+              {/* MENU BUTTON & DROPDOWN */}
+              <div className="relative" ref={menuRef}>
                 <button 
-                  onClick={exportToGoogleTasks}
-                  className="text-[10px] flex items-center gap-1 text-blue-600 font-bold uppercase tracking-wide hover:underline disabled:opacity-50"
-                  title="Export pending tasks to Google Tasks"
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="p-1 rounded-full hover:bg-gray-200 transition-colors text-gray-500"
+                  title={dict.menuTitle}
                 >
-                  {dict.export}
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                   </svg>
                 </button>
-              )}
+
+                {isMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                    
+                    {/* Share Button (Web Share API) */}
+                    {canShare && (
+                      <button 
+                        onClick={handleShareList}
+                        className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                        {dict.share}
+                      </button>
+                    )}
+
+                    {/* Copy Button */}
+                    <button 
+                      onClick={handleCopyList}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                      {dict.copy}
+                    </button>
+
+                    {/* Google Tasks Export (Only if User) */}
+                    {user && (
+                      <button 
+                        onClick={exportToGoogleTasks}
+                        className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 font-medium border-t border-gray-100 flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                        {dict.export}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             
             <div className="divide-y divide-gray-50">
