@@ -1,10 +1,10 @@
 "use client";
 import { useAuth } from "../context/AuthContext";
 
-export default function AuthButton() {
-  const { user, loading, logout, signInWithGoogle} = useAuth();
+// Accept label as prop for translation
+export default function AuthButton({ label }: { label?: string }) {
+  const { user, signInWithGoogle, logout, loading } = useAuth();
 
-  // 1. Loading Skeleton (Prevents jump)
   if (loading) {
     return (
       <div className="w-24 h-8 bg-gray-200 rounded-full animate-pulse" />
@@ -19,9 +19,9 @@ export default function AuthButton() {
         )}
         <button 
           onClick={logout}
-          className="text-xs cursor-pointer text-gray-500 hover:text-red-500 transition-colors font-medium"
+          className="text-xs text-gray-500 hover:text-red-500 transition-colors font-medium"
         >
-          Sign Out
+          {label || "Sign Out"}
         </button>
       </div>
     );
@@ -32,7 +32,7 @@ export default function AuthButton() {
       onClick={signInWithGoogle}
       className="text-xs bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition shadow-sm font-semibold animate-in fade-in duration-300"
     >
-      Sign In
+      {label || "Sign In"}
     </button>
   );
 }

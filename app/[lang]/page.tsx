@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useAuth } from "./context/AuthContext";
-import AuthButton from "./components/AuthButton";
-import { db } from "./lib/firebase";
+import { useState, useRef, useEffect, use } from "react";
+import { useAuth } from "../context/AuthContext";
+import AuthButton from "../components/AuthButton";
+import { db } from "../lib/firebase";
+import { getDictionary } from "../lib/dictionaries";
 import { 
   collection, 
   query, 
@@ -43,14 +44,22 @@ function TaskListSkeleton() {
   );
 }
 
-export default function Home() {
-  const { user, loading: authLoading } = useAuth();
+export default function Home({ params }: { params: Promise<{ lang: string }> }) {
+  // Unwrap params using React.use() or await (Next.js 15+ compatible)
+  const { lang } = use(params);
+  const dict = getDictionary(lang);
+
+  const { user, googleAccessToken, signInWithGoogle, loading: authLoading } = useAuth();
   
   // --- STATE ---
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [messages, setMessages] = useState<{ type: 'user' | 'bot'; content: string }[]>([
-    { type: 'bot', content: "Hello! What tasks do we need to organize?" }
-  ]);
+  // Initialize message with dictionary greeting
+  const [messages, setMessages] = useState<{ type: 'user' | 'bot'; content: string }[]>([]);
+  
+  // Effect to set initial greeting when dict loads
+  useEffect(() => {
+    setMessages([{ type: 'bot', content: dict.greeting }]);
+  }, [dict.greeting]);
   
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -72,8 +81,6 @@ export default function Home() {
     try {
       const localTasks: Task[] = JSON.parse(savedGuest);
       if (localTasks.length === 0) return;
-
-      console.log(`[Migration] Found ${localTasks.length} guest tasks. Migrating...`);
       
       const batch = writeBatch(db);
       const userTasksRef = collection(db, "users", userId, "tasks");
@@ -86,8 +93,7 @@ export default function Home() {
       await batch.commit();
       
       localStorage.removeItem("guest_tasks");
-      showToast("Local tasks synced to cloud!");
-      console.log("[Migration] Success.");
+      showToast(dict.localSynced);
 
     } catch (e) {
       console.error("[Migration] Failed:", e);
@@ -100,10 +106,8 @@ export default function Home() {
     if (authLoading) return;
 
     if (user) {
-      // 1. Check for migration FIRST
       migrateGuestTasks(user.uid);
 
-      // 2. Then Listen to Firestore
       const q = query(collection(db, "users", user.uid, "tasks"));
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const dbTasks = snapshot.docs.map(doc => ({
@@ -116,24 +120,63 @@ export default function Home() {
       }, (error) => {
         console.error("[Firestore] Error:", error);
         if (error.code === 'permission-denied') {
-          showToast("Database Permission Denied.");
+          showToast(dict.permissionDenied);
         }
         setIsDataLoaded(true);
       });
       return () => unsubscribe();
 
     } else {
-      // 3. GUEST: Load from LocalStorage
       const saved = localStorage.getItem("guest_tasks");
       if (saved) setTasks(JSON.parse(saved));
       setIsDataLoaded(true);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, dict]); // added dict dependency
 
   // Helper for Guest Mode
   const saveLocal = (newTasks: Task[]) => {
     setTasks(newTasks);
     localStorage.setItem("guest_tasks", JSON.stringify(newTasks));
+  };
+
+  // --- EXPORT TO GOOGLE TASKS ---
+  const exportToGoogleTasks = async () => {
+    if (!user) return;
+    
+    if (!googleAccessToken) {
+      showToast("Please sign in again to enable export"); // Keep generic or add to dict
+      await signInWithGoogle(); 
+      return;
+    }
+
+    const pendingTasks = tasks.filter(t => t.status === 'pending');
+    if (pendingTasks.length === 0) {
+      showToast("No pending tasks");
+      return;
+    }
+
+    showToast(`Exporting ${pendingTasks.length} tasks...`);
+    
+    try {
+      let count = 0;
+      for (const task of pendingTasks) {
+        const response = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${googleAccessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title: task.title })
+        });
+        
+        if (response.ok) count++;
+      }
+      
+      showToast(`Success: ${count} exported!`);
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to export");
+    }
   };
 
   // --- ACTIONS ---
@@ -228,7 +271,7 @@ export default function Home() {
         stream.getTracks().forEach(track => track.stop());
         const duration = Date.now() - startTimeRef.current;
         if (duration < 500) {
-          showToast("Hold to record audio");
+          showToast(dict.holdToRecord);
           setIsRecording(false);
           return;
         }
@@ -256,7 +299,7 @@ export default function Home() {
 
     setMessages(prev => [...prev, { 
       type: 'user', 
-      content: isAudio ? "Voice message" : (content as string) 
+      content: isAudio ? dict.voiceMessage : (content as string) 
     }]);
 
     if (!isAudio) setInputVal("");
@@ -265,23 +308,25 @@ export default function Home() {
 
     try {
       let response;
+      // Pass 'language' to the backend
       if (isAudio) {
         const formData = new FormData();
         formData.append('audio', content as Blob);
         formData.append('currentTasks', JSON.stringify(tasks));
+        formData.append('language', lang); // Sending Language
         response = await fetch('/api/process', { method: 'POST', body: formData });
       } else {
         response = await fetch('/api/process', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: content, currentTasks: tasks }) 
+          body: JSON.stringify({ text: content, currentTasks: tasks, language: lang }) // Sending Language
         });
       }
 
       const data: ApiResponse = await response.json();
 
       if (data.tasks) {
-        setMessages(prev => [...prev, { type: 'bot', content: data.summary || "List updated." }]);
+        setMessages(prev => [...prev, { type: 'bot', content: data.summary || dict.updated }]);
         setIsLoading(false); 
 
         if (user) {
@@ -290,7 +335,7 @@ export default function Home() {
           saveLocal(data.tasks);
         }
       } else {
-        setMessages(prev => [...prev, { type: 'bot', content: "I didn't understand. Try again." }]);
+        setMessages(prev => [...prev, { type: 'bot', content: dict.error }]);
         setIsLoading(false);
       }
 
@@ -303,16 +348,13 @@ export default function Home() {
   };
 
   return (
-    // UPDATED: Added items-center
     <div className="fixed inset-0 flex justify-center items-center bg-[#1a1a1a] overflow-hidden overscroll-none font-sans">
-      
-      {/* UPDATED: Added md:h-[90vh], md:rounded-2xl, and overflow-hidden */}
       <div className="w-full h-full md:h-[90vh] md:rounded-2xl overflow-hidden max-w-md bg-gray-50 flex flex-col shadow-2xl relative">
         
         {/* HEADER */}
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-10 shadow-sm min-h-[60px]">
-          <h1 className="font-bold text-gray-800 text-lg tracking-tight">Task Organizer AI</h1>
-          <AuthButton />
+          <h1 className="font-bold text-gray-800 text-lg tracking-tight">{dict.title}</h1>
+          <AuthButton label={user ? dict.signOut : dict.signIn} />
         </header>
 
         {/* TOAST */}
@@ -353,8 +395,22 @@ export default function Home() {
           <div className="shrink-0 max-h-[35%] overflow-y-auto bg-white border-t border-gray-200 shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)] z-10 animate-in slide-in-from-bottom-5 duration-300">
             <div className="p-2 bg-gray-50 border-b border-gray-100 sticky top-0 flex justify-between items-center px-4">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                {user ? "Cloud List" : "Local List"} ({tasks.length})
+                {user ? dict.listTitleCloud : dict.listTitleLocal} ({tasks.length})
               </span>
+              
+              {/* EXPORT BUTTON */}
+              {user && (
+                <button 
+                  onClick={exportToGoogleTasks}
+                  className="text-[10px] flex items-center gap-1 text-blue-600 font-bold uppercase tracking-wide hover:underline disabled:opacity-50"
+                  title="Export pending tasks to Google Tasks"
+                >
+                  {dict.export}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </button>
+              )}
             </div>
             
             <div className="divide-y divide-gray-50">
@@ -418,7 +474,7 @@ export default function Home() {
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend(inputVal, false)}
               className="flex-1 bg-gray-50 border border-transparent rounded-full px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-blue-100 focus:ring-2 focus:ring-blue-50 transition-all"
-              placeholder="Type a task..."
+              placeholder={dict.placeholder}
               disabled={isLoading || isRecording}
             />
             

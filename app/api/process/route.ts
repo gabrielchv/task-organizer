@@ -4,35 +4,44 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// UPDATED PROMPT: Allows conversation mixed with task management
-const SYSTEM_INSTRUCTION = `
-You are Task Organizer AI, a friendly and helpful assistant.
-Your dual goal is to:
-1. Chat with the user and answer questions about how to use this app.
-2. Manage their task list based on their requests.
+// --- SYSTEM PROMPTS (By Language) ---
 
-APP CAPABILITIES (For answering user questions):
-- You can add, remove, update, or mark tasks as done.
-- You can accept text or voice input.
-- You DO NOT have access to the user's calendar or email, only their task list here.
-
-CRITICAL RULES FOR TASK MANAGEMENT:
-1. You will receive the "Current Tasks" list.
-2. You MUST return the COMPLETE list of tasks in the 'tasks' array. 
-3. DO NOT OMIT existing tasks unless the user explicitly asks to delete/remove them.
-4. If the user adds a task, your output must be: [All Existing Tasks] + [New Task].
-5. If the user updates a task, return the full list with that specific task modified.
-6. If the user marks a task as done, change its status to 'completed'.
-7. DO NOT use emojis in the response.
-
-Output Format (JSON ONLY):
-{
-  "summary": "This is your conversational response. If the user asked a question, answer it here. If they managed tasks, briefly confirm the action (e.g., 'I added that to your list' or 'To export, click the button above').",
-  "tasks": [
-    { "id": "existing_id", "title": "Existing task", "status": "pending" }
-  ]
-}
-`;
+const PROMPTS = {
+  'en-US': `
+    You are Task Helper AI, a friendly assistant.
+    Goal: Chat with user (answer usage questions) AND manage tasks.
+    
+    CAPABILITIES:
+    - Add/Remove/Update/Complete tasks.
+    - Export to Google Tasks (requires login).
+    - No email/calendar access.
+    
+    RULES:
+    1. Return COMPLETE list of tasks.
+    2. Add new tasks to existing list.
+    3. 'summary': Conversational response in ENGLISH.
+    4. NO emojis.
+    
+    Output JSON: { "summary": "...", "tasks": [...] }
+  `,
+  'pt-BR': `
+    Você é o Task Helper AI, um assistente amigável.
+    Objetivo: Conversar com o usuário (responder dúvidas) E gerenciar tarefas.
+    
+    CAPACIDADES:
+    - Adicionar/Remover/Atualizar/Completar tarefas.
+    - Exportar para Google Tasks (precisa de login).
+    - Sem acesso a email/calendário.
+    
+    REGRAS:
+    1. Retorne a lista COMPLETA de tarefas.
+    2. Adicione novas tarefas à lista existente.
+    3. 'summary': Resposta conversacional em PORTUGUÊS.
+    4. NÃO use emojis.
+    
+    Output JSON: { "summary": "...", "tasks": [...] }
+  `
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,13 +49,17 @@ export async function POST(req: NextRequest) {
     
     let userText = "";
     let currentTasks = [];
+    let language = "en-US"; // Default
 
+    // Extract data based on content type
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const audioFile = formData.get("audio") as File;
       const tasksJson = formData.get("currentTasks") as string;
+      const langParam = formData.get("language") as string;
       
       if (tasksJson) currentTasks = JSON.parse(tasksJson);
+      if (langParam) language = langParam;
 
       if (!audioFile) {
         return NextResponse.json({ error: "Audio not provided" }, { status: 400 });
@@ -54,9 +67,11 @@ export async function POST(req: NextRequest) {
 
       const arrayBuffer = await audioFile.arrayBuffer();
       const base64Audio = Buffer.from(arrayBuffer).toString("base64");
+      
+      const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
 
       const result = await model.generateContent([
-        SYSTEM_INSTRUCTION,
+        systemPrompt,
         `Current Tasks (DO NOT DELETE THESE UNLESS ASKED): ${JSON.stringify(currentTasks)}`,
         {
           inlineData: {
@@ -71,8 +86,11 @@ export async function POST(req: NextRequest) {
       const body = await req.json();
       userText = body.text || "";
       currentTasks = body.currentTasks || [];
+      if (body.language) language = body.language;
       
-      const prompt = `${SYSTEM_INSTRUCTION}
+      const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
+      
+      const prompt = `${systemPrompt}
       Current Tasks (DO NOT DELETE THESE UNLESS ASKED): ${JSON.stringify(currentTasks)}
       User Input: ${userText}`;
       
