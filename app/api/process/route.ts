@@ -14,7 +14,6 @@ const PROMPTS = {
     
     CAPABILITIES:
     - Add/Remove/Update/Complete tasks.
-    - Export to Google Tasks (requires login).
     - No email/calendar access.
     
     RULES:
@@ -38,7 +37,6 @@ const PROMPTS = {
     
     CAPACIDADES:
     - Adicionar/Remover/Atualizar/Completar tarefas.
-    - Exportar para Google Tasks (precisa de login).
     - Sem acesso a email/calendário.
     
     REGRAS:
