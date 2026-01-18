@@ -415,7 +415,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
             
             <div className="divide-y divide-gray-50">
               {tasks.map((task) => (
-                <div key={task.id} className="p-3 pl-4 flex items-center gap-3 hover:bg-gray-50 transition-colors group">
+                // 1. Mudado 'items-center' para 'items-start'
+                <div key={task.id} className="p-3 pl-4 flex items-start gap-3 hover:bg-gray-50 transition-colors group">
                   <button 
                     onClick={() => toggleTask(task.id)}
                     className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all duration-200 ${
@@ -431,13 +432,15 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                     )}
                   </button>
                   
-                  <span className={`text-sm flex-1 truncate transition-all duration-200 ${task.status === 'completed' ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-800'}`}>
+                  {/* 2. Removido 'truncate', adicionado 'break-words' */}
+                  <span className={`text-sm flex-1 break-words transition-all duration-200 ${task.status === 'completed' ? 'text-gray-400 line-through decoration-gray-300' : 'text-gray-800'}`}>
                     {task.title}
                   </span>
 
                   <button 
                     onClick={() => deleteTask(task.id)}
-                    className="text-gray-300 hover:text-red-500 p-2 transition-colors"
+                    // 3. Adicionado '-mt-1.5' para alinhar o ícone com a primeira linha de texto
+                    className="text-gray-300 hover:text-red-500 p-2 -mt-1.5 transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
