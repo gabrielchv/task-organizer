@@ -311,7 +311,7 @@ export default function Home() {
         
         {/* HEADER */}
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-10 shadow-sm min-h-[60px]">
-          <h1 className="font-bold text-gray-800 text-lg tracking-tight">Task Helper AI</h1>
+          <h1 className="font-bold text-gray-800 text-lg tracking-tight">Task Organizer AI</h1>
           <AuthButton />
         </header>
 

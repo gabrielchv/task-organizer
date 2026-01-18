@@ -3,7 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Task Helper AI",
+  title: "Task Organizer AI",
   description: "Organize your life with AI",
 };
 
