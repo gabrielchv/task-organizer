@@ -21,7 +21,6 @@ const PROMPTS = {
     - IF asked to do any of the above, clearly state: "I cannot do that. I only manage the list within this app."
 
     [APP CAPABILITIES KNOWLEDGE]
-    - "Export to Google Tasks": This is a BUTTON in the interface. You cannot trigger it. If the user asks to export, tell them: "Please click the 'Export to Google' button at the top of the list."
     - "Voice Input": You are currently processing text or voice converted to text.
     
     [TASK MANAGEMENT RULES]
@@ -58,7 +57,6 @@ const PROMPTS = {
     - SE solicitado a fazer qualquer uma das opções acima, declare claramente: "Não consigo fazer isso. Eu apenas gerencio a lista dentro deste aplicativo."
 
     [CONHECIMENTO DAS CAPACIDADES DO APP]
-    - "Exportar para o Google": Este é um BOTÃO na interface. Você não pode acioná-lo. Se o usuário pedir para exportar, diga: "Por favor, clique no botão 'Exportar para Google' no topo da lista."
     - "Entrada de Voz": Você está processando texto ou voz convertida em texto.
     
     [REGRAS DE GERENCIAMENTO DE TAREFAS]
