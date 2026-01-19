@@ -16,6 +16,12 @@ import {
   writeBatch 
 } from "firebase/firestore";
 
+// --- TENSORFLOW IMPORTS ---
+import * as tf from "@tensorflow/tfjs";
+import * as speechCommands from "@tensorflow-models/speech-commands";
+import "@tensorflow/tfjs-backend-webgl";
+import "@tensorflow/tfjs-backend-cpu";
+
 interface Task {
   id: string;
   title: string;
@@ -107,10 +113,18 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Recording State
   const [isRecording, setIsRecording] = useState(false);
+  const [isWakeWordTriggered, setIsWakeWordTriggered] = useState(false);
+  
   const [toast, setToast] = useState<string | null>(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
+  // Wake Word State
+  const [model, setModel] = useState<speechCommands.SpeechCommandRecognizer | null>(null);
+  const [isModelLoading, setIsModelLoading] = useState(true);
+
   // UI State
   const [showTaskMenu, setShowTaskMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
@@ -127,7 +141,83 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const isPressingRef = useRef(false); 
   const optionsMenuRef = useRef<HTMLButtonElement>(null);
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
+  const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // --- WAKE WORD SETUP ---
+  const WAKE_WORD = "start"; // Your trained keyword
+
+  useEffect(() => {
+    loadModel();
+  }, []);
+
+  const loadModel = async () => {
+    try {
+      await tf.ready();
+      const baseUrl = window.location.origin;
+      const recognizer = speechCommands.create(
+        "BROWSER_FFT", 
+        undefined, 
+        `${baseUrl}/model/task-organizer-model.json`, 
+        `${baseUrl}/model/metadata.json`
+      );
+      await recognizer.ensureModelLoaded();
+      setModel(recognizer);
+      setIsModelLoading(false);
+      console.log("Wake Word Model Loaded");
+    } catch (error) {
+      console.error("Model Error:", error);
+      setIsModelLoading(false);
+    }
+  };
+
+  // Toggle Listening: Listen when NOT recording, Stop when recording
+  useEffect(() => {
+    if (!model || isModelLoading) return;
+
+    if (isRecording) {
+      // Pause detection while recording to free up the mic and avoid self-triggering
+      model.stopListening().catch(() => {});
+    } else {
+      // Start detection
+      model.listen(async (result) => {
+        const scores = result.scores as Float32Array;
+        const maxScoreIndex = scores.indexOf(Math.max(...scores));
+        const detectedWord = model.wordLabels()[maxScoreIndex];
+        
+        // Threshold > 0.9 for stability
+        if (detectedWord === WAKE_WORD && scores[maxScoreIndex] > 0.90) {
+           console.log("Wake Word Detected!");
+           triggerWakeWordRecording();
+        }
+      }, {
+        includeSpectrogram: false,
+        probabilityThreshold: 0.85,
+        invokeCallbackOnNoiseAndUnknown: true,
+        overlapFactor: 0.5 
+      }).catch(err => console.error("Listening error:", err));
+    }
+
+    return () => {
+        if(model) model.stopListening().catch(() => {});
+    };
+  }, [model, isRecording, isModelLoading]);
+
+
+  const triggerWakeWordRecording = async () => {
+    // Visual feedback
+    setIsWakeWordTriggered(true);
+    
+    // Start Recording programmatically
+    await startRecordingLogic();
+
+    // Auto-stop after 5 seconds (Simple VAD replacement)
+    if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
+    wakeWordTimeoutRef.current = setTimeout(() => {
+        stopRecordingLogic();
+    }, 5000); // 5 seconds listening window
+  };
+
+  // --- INITIALIZATION ---
   useEffect(() => {
     setMessages(prev => {
         if (prev.length === 0) return [{ id: 'init', type: 'bot', content: dict.greeting }];
@@ -139,7 +229,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
   }, []);
 
-  // Click Outside for Options Menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -361,7 +450,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   };
 
-  // --- RECORDING & SENDING ---
+  // --- RECORDING LOGIC (Refactored) ---
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -373,17 +462,17 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   }, [messages, isLoading]);
 
-  const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); 
+  // Logic to START recording (can be called by Button or Wake Word)
+  const startRecordingLogic = async () => {
     isPressingRef.current = true;
     startTimeRef.current = Date.now();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
+      // If user released button very quickly or logic cancelled
       if (!isPressingRef.current) {
         stream.getTracks().forEach(track => track.stop());
-        showToast(dict.holdToRecord);
         return;
       }
 
@@ -396,12 +485,15 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         stream.getTracks().forEach(track => track.stop());
         const duration = Date.now() - startTimeRef.current;
         
+        // Minimum duration check
         if (duration < 500) {
           showToast(dict.holdToRecord);
         } else {
           handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
         }
+        
         setIsRecording(false);
+        setIsWakeWordTriggered(false); // Reset wake word state
       };
       
       mediaRecorder.start();
@@ -411,18 +503,39 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       showToast("Microphone denied"); 
       setIsRecording(false);
       isPressingRef.current = false;
+      setIsWakeWordTriggered(false);
     }
   };
 
-  const stopRecording = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
+  // Logic to STOP recording
+  const stopRecordingLogic = () => {
     isPressingRef.current = false;
+    // Clear auto-stop timeout if it exists
+    if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
   };
 
+  // Button Handlers
+  const handleButtonStart = (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      // If already recording (via wake word), do nothing or maybe stop it? 
+      // Let's assume pressing button overrides wake word timer and holds it.
+      if (isRecording && isWakeWordTriggered) {
+          if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
+          return;
+      }
+      startRecordingLogic();
+  };
+
+  const handleButtonStop = (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      stopRecordingLogic();
+  };
+
+  // --- SENDING ---
   const handleSend = async (content: string | Blob, isAudio: boolean) => {
     if (!isAudio && !(content as string).trim()) return;
     const msgId = Date.now().toString();
@@ -434,15 +547,14 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
     }]);
 
-    // PREPARE HISTORY FOR API (Last 6 messages)
     const history = messages.slice(-6).map(m => ({
         role: m.type === 'user' ? 'User' : 'AI',
-        content: m.transcription || m.content || "" // Use transcription if audio
+        content: m.transcription || m.content || "" 
     }));
 
     if (!isAudio) setInputVal("");
     setIsLoading(true);
-    if (isAudio) setIsRecording(false);
+    // Note: setIsRecording(false) is handled in onstop
 
     try {
       let response;
@@ -451,7 +563,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         formData.append('audio', content as Blob);
         formData.append('currentTasks', JSON.stringify(tasks));
         formData.append('language', lang); 
-        // Append History
         formData.append('history', JSON.stringify(history));
 
         response = await fetch('/api/process', { method: 'POST', body: formData });
@@ -658,13 +769,18 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                </svg>
             </button>
 
+            {/* MIC BUTTON */}
             <button
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onTouchStart={startRecording}
-              onTouchEnd={stopRecording}
-              className={`p-3 rounded-full transition-all flex items-center justify-center shadow-sm select-none touch-none cursor-pointer ${
-                isRecording ? 'bg-red-500 text-white scale-110 ring-4 ring-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'
+              onMouseDown={handleButtonStart}
+              onMouseUp={handleButtonStop}
+              onTouchStart={handleButtonStart}
+              onTouchEnd={handleButtonStop}
+              className={`p-3 rounded-full transition-all duration-300 flex items-center justify-center shadow-sm select-none touch-none cursor-pointer ${
+                isRecording 
+                  ? isWakeWordTriggered 
+                     ? 'bg-indigo-500 text-white scale-110 ring-4 ring-indigo-200' // Wake Word Color
+                     : 'bg-red-500 text-white scale-110 ring-4 ring-red-100'       // Normal Hold Color
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
