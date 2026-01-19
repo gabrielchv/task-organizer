@@ -7,6 +7,7 @@ const dictionaries = {
     listTitleCloud: "Cloud Tasks",
     listTitleLocal: "Local Tasks",
     export: "Export to Google Tasks",
+    exportCalendar: "Export to Google Calendar",
     share: "Share List",
     copy: "Copy List",
     listCopied: "List copied to clipboard!",
@@ -20,7 +21,6 @@ const dictionaries = {
     placeholder: "Type a task (e.g., 'Dentist tomorrow at 2pm')...",
     showTranscription: "Show Text",
     hideTranscription: "Hide Text",
-    // New
     tasksMenu: "Tasks",
     noTasks: "No tasks yet.",
     uncategorized: "General",
@@ -37,6 +37,7 @@ const dictionaries = {
     listTitleCloud: "Tarefas na Nuvem",
     listTitleLocal: "Tarefas Locais",
     export: "Exportar para Google Tasks",
+    exportCalendar: "Exportar para Google Calendar",
     share: "Compartilhar Lista",
     copy: "Copiar Lista",
     listCopied: "Lista copiada para a área de transferência!",
@@ -50,7 +51,6 @@ const dictionaries = {
     placeholder: "Digite uma tarefa (ex: 'Dentista amanhã às 14h')...",
     showTranscription: "Ver Transcrição",
     hideTranscription: "Ocultar Transcrição",
-    // New
     tasksMenu: "Tarefas",
     noTasks: "Nenhuma tarefa ainda.",
     uncategorized: "Geral",

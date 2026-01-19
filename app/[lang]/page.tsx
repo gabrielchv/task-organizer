@@ -124,6 +124,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const audioChunksRef = useRef<Blob[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
+  const isPressingRef = useRef(false); // Tracks physical button state
   const optionsMenuRef = useRef<HTMLButtonElement>(null);
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -231,7 +232,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   // --- EXPORT & ACTIONS ---
   const getFormattedList = () => {
     return tasks.map(t => 
-      `[${t.status === 'completed' ? 'x' : ' '}] ${t.title} (${t.date ? new Date(t.date).toLocaleString() : ''})`
+      `[${t.status === 'completed' ? 'x' : ' '}] ${t.title} (${t.date ? t.date : ''})`
     ).join('\n');
   };
 
@@ -262,14 +263,18 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
     const pendingTasks = tasks.filter(t => t.status === 'pending');
     if (pendingTasks.length === 0) { showToast("No pending tasks"); return; }
-    showToast(`Exporting ${pendingTasks.length} tasks...`);
+    showToast(`Exporting to Tasks...`);
     
     try {
       let count = 0;
       for (const task of pendingTasks) {
         const payload: any = { title: task.title };
         if (task.date) {
-             payload.due = new Date(task.date).toISOString();
+            if (task.date.length === 10) {
+               payload.due = task.date + 'T00:00:00.000Z'; 
+            } else {
+               payload.due = new Date(task.date).toISOString();
+            }
         }
         const response = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
           method: 'POST',
@@ -280,6 +285,52 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       }
       showToast(`Success: ${count} exported!`);
     } catch (error) { showToast("Failed to export"); }
+  };
+
+  const exportToCalendar = async () => {
+    setIsOptionsMenuOpen(false);
+    if (!user) return;
+    if (!googleAccessToken) {
+      showToast(dict.signIn + " again"); 
+      await signInWithGoogle(); 
+      return;
+    }
+    
+    const datedTasks = tasks.filter(t => t.status === 'pending' && t.date);
+    if (datedTasks.length === 0) { showToast("No dated tasks to export"); return; }
+    showToast(`Exporting to Calendar...`);
+
+    try {
+      let count = 0;
+      for (const task of datedTasks) {
+         let start: any = {};
+         let end: any = {};
+
+         if (task.date && task.date.length === 10) {
+             start = { date: task.date };
+             const nextDay = new Date(task.date);
+             nextDay.setDate(nextDay.getDate() + 1);
+             end = { date: nextDay.toISOString().split('T')[0] };
+         } else if (task.date) {
+             const startDate = new Date(task.date);
+             const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); 
+             start = { dateTime: startDate.toISOString() };
+             end = { dateTime: endDate.toISOString() };
+         }
+
+         const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                summary: task.title,
+                start,
+                end
+            })
+         });
+         if (response.ok) count++;
+      }
+      showToast(`Success: ${count} exported!`);
+    } catch (e) { showToast("Failed to export"); }
   };
 
   const toggleTask = async (taskId: string) => {
@@ -322,29 +373,53 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   }, [messages, isLoading]);
 
-  const startRecording = async () => {
+  const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); // Prevent ghost events
+    isPressingRef.current = true;
+    startTimeRef.current = Date.now();
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      startTimeRef.current = Date.now();
+      
+      // If user released button while waiting for permission/stream
+      if (!isPressingRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        showToast(dict.holdToRecord);
+        return;
+      }
+
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
-        if (Date.now() - startTimeRef.current < 500) {
+        const duration = Date.now() - startTimeRef.current;
+        
+        // Show warning if held for less than 500ms
+        if (duration < 500) {
           showToast(dict.holdToRecord);
-          setIsRecording(false);
-          return;
+        } else {
+          handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
         }
-        handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
+        setIsRecording(false);
       };
+      
       mediaRecorder.start();
       setIsRecording(true);
-    } catch (err) { showToast("Microphone denied"); setIsRecording(false); }
+    } catch (err) { 
+      console.error(err);
+      showToast("Microphone denied"); 
+      setIsRecording(false);
+      isPressingRef.current = false;
+    }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    isPressingRef.current = false;
+    
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
@@ -412,6 +487,13 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return null;
+    
+    if (dateStr.length === 10) {
+         const [y, m, d] = dateStr.split('-').map(Number);
+         const dateObj = new Date(y, m - 1, d);
+         return dateObj.toLocaleDateString(lang, { month: 'short', day: 'numeric' });
+    }
+
     const date = new Date(dateStr);
     return date.toLocaleDateString(lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
@@ -455,10 +537,16 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                 {dict.copy}
              </button>
              {user && (
-                <button onClick={exportToGoogleTasks} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 border-t flex items-center gap-2 cursor-pointer">
-                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                   {dict.export}
-                </button>
+                <>
+                  <button onClick={exportToGoogleTasks} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 border-t flex items-center gap-2 cursor-pointer">
+                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                     {dict.export}
+                  </button>
+                  <button onClick={exportToCalendar} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer">
+                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                     {dict.exportCalendar}
+                  </button>
+                </>
              )}
           </div>,
           document.body
