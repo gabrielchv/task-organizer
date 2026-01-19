@@ -13,13 +13,17 @@ export default function AuthButton({ label }: { label?: string }) {
 
   if (user) {
     return (
-      <div className="flex items-center gap-2 animate-in fade-in duration-300">
+      <div className="flex items-center gap-2 animate-in fade-in duration-300 shrink-0">
         {user.photoURL && (
-          <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-gray-200" />
+          <img 
+            src={user.photoURL} 
+            alt="User" 
+            className="w-8 h-8 rounded-full border border-gray-200 shrink-0" 
+          />
         )}
         <button 
           onClick={logout}
-          className="text-xs text-gray-500 hover:text-red-500 transition-colors font-medium"
+          className="text-xs text-gray-500 hover:text-red-500 transition-colors font-medium whitespace-nowrap"
         >
           {label || "Sign Out"}
         </button>
@@ -30,7 +34,7 @@ export default function AuthButton({ label }: { label?: string }) {
   return (
     <button 
       onClick={signInWithGoogle}
-      className="text-xs bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition shadow-sm font-semibold animate-in fade-in duration-300"
+      className="text-xs bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition shadow-sm font-semibold animate-in fade-in duration-300 shrink-0 whitespace-nowrap"
     >
       {label || "Sign In"}
     </button>

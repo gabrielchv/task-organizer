@@ -1,11 +1,11 @@
 const dictionaries = {
   'en-US': {
     title: "Task Organizer",
-    greeting: "Hello! How can I help you organize your tasks today?",
+    greeting: "Hello! I can organize your tasks by category and date. What's on your mind?",
     localSynced: "Local tasks synced to cloud!",
     permissionDenied: "Permission denied. Please check your access.",
-    listTitleCloud: "Your Cloud Tasks",
-    listTitleLocal: "Your Local Tasks",
+    listTitleCloud: "Cloud Tasks",
+    listTitleLocal: "Local Tasks",
     export: "Export to Google Tasks",
     share: "Share List",
     copy: "Copy List",
@@ -17,17 +17,25 @@ const dictionaries = {
     error: "Something went wrong.",
     signOut: "Sign Out",
     signIn: "Sign In with Google",
-    placeholder: "Type a task or ask a question...",
+    placeholder: "Type a task (e.g., 'Dentist tomorrow at 2pm')...",
     showTranscription: "Show Text",
-    hideTranscription: "Hide Text"
+    hideTranscription: "Hide Text",
+    // New
+    tasksMenu: "Tasks",
+    noTasks: "No tasks yet.",
+    uncategorized: "General",
+    dateNotSet: "No date",
+    backToChat: "Back to Chat",
+    category: "Category",
+    date: "Date"
   },
   'pt-BR': {
     title: "Organizador de Tarefas",
-    greeting: "Olá! Como posso ajudar a organizar suas tarefas hoje?",
+    greeting: "Olá! Posso organizar suas tarefas por categoria e data. O que manda?",
     localSynced: "Tarefas locais sincronizadas com a nuvem!",
     permissionDenied: "Permissão negada. Verifique seu acesso.",
-    listTitleCloud: "Suas Tarefas na Nuvem",
-    listTitleLocal: "Suas Tarefas Locais",
+    listTitleCloud: "Tarefas na Nuvem",
+    listTitleLocal: "Tarefas Locais",
     export: "Exportar para Google Tasks",
     share: "Compartilhar Lista",
     copy: "Copiar Lista",
@@ -39,9 +47,17 @@ const dictionaries = {
     error: "Algo deu errado.",
     signOut: "Sair",
     signIn: "Entrar com Google",
-    placeholder: "Digite uma tarefa ou faça uma pergunta...",
+    placeholder: "Digite uma tarefa (ex: 'Dentista amanhã às 14h')...",
     showTranscription: "Ver Transcrição",
-    hideTranscription: "Ocultar Transcrição"
+    hideTranscription: "Ocultar Transcrição",
+    // New
+    tasksMenu: "Tarefas",
+    noTasks: "Nenhuma tarefa ainda.",
+    uncategorized: "Geral",
+    dateNotSet: "Sem data",
+    backToChat: "Voltar ao Chat",
+    category: "Categoria",
+    date: "Data"
   },
 };
 
