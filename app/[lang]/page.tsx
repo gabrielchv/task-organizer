@@ -114,6 +114,13 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   
+  // Use Refs to access latest state inside async callbacks (Wake Word / VAD)
+  const tasksRef = useRef(tasks);
+  const messagesRef = useRef(messages);
+
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  
   // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [isWakeWordTriggered, setIsWakeWordTriggered] = useState(false);
@@ -124,6 +131,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   // Wake Word State
   const [model, setModel] = useState<speechCommands.SpeechCommandRecognizer | null>(null);
   const [isModelLoading, setIsModelLoading] = useState(true);
+  const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(false); 
 
   // UI State
   const [showTaskMenu, setShowTaskMenu] = useState(false);
@@ -143,14 +151,11 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
   const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Ref to store the ACTUAL mime type used by the browser
-  const mimeTypeRef = useRef<string>("");
-  
   // Ref for VAD (Voice Activity Detection) cleanup
   const vadCleanupRef = useRef<(() => void) | null>(null);
 
   // --- WAKE WORD SETUP ---
-  const WAKE_WORDS = ["organizer", "organizador"]; 
+  const WAKE_WORD = "organizer"; 
 
   useEffect(() => {
     loadModel();
@@ -169,46 +174,66 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       await recognizer.ensureModelLoaded();
       setModel(recognizer);
       setIsModelLoading(false);
-      console.log("Wake Word Model Loaded");
     } catch (error) {
       console.error("Model Error:", error);
       setIsModelLoading(false);
     }
   };
 
-  // Toggle Listening
+  // Toggle Listening: Robust Async Handling
   useEffect(() => {
     if (!model || isModelLoading) return;
 
-    if (isRecording) {
-      model.stopListening().catch(() => {});
-    } else {
-      model.listen(async (result) => {
-        const scores = result.scores as Float32Array;
-        const maxScoreIndex = scores.indexOf(Math.max(...scores));
-        const detectedWord = model.wordLabels()[maxScoreIndex];
-        const confidence = scores[maxScoreIndex];
-        
-        if (WAKE_WORDS.includes(detectedWord) && confidence > 0.92) {
-           console.log(`Wake Word Detected: ${detectedWord}`);
-           triggerWakeWordRecording();
+    let isCancelled = false;
+
+    const manageListening = async () => {
+      try {
+        // Force stop ANY existing listeners first to prevent conflicts
+        if (model.isListening()) {
+            await model.stopListening().catch(() => {});
         }
-      }, {
-        includeSpectrogram: false,
-        probabilityThreshold: 0.85, 
-        invokeCallbackOnNoiseAndUnknown: true,
-        overlapFactor: 0.5 
-      }).catch(err => console.error("Listening error:", err));
-    }
+
+        if (isCancelled) return;
+
+        // Only start if enabled AND not currently recording
+        if (isWakeWordEnabled && !isRecording) {
+            await model.listen(async (result) => {
+                if (isCancelled) return;
+                
+                const scores = result.scores as Float32Array;
+                const maxScore = Math.max(...scores);
+                const maxScoreIndex = scores.indexOf(maxScore);
+                const detectedWord = model.wordLabels()[maxScoreIndex];
+                
+                // Strict threshold check
+                if (detectedWord === WAKE_WORD && maxScore > 0.90) {
+                   triggerWakeWordRecording();
+                }
+            }, {
+                includeSpectrogram: false,
+                probabilityThreshold: 0.85, 
+                invokeCallbackOnNoiseAndUnknown: true,
+                overlapFactor: 0.5 
+            });
+        }
+      } catch (err) {
+        console.error("Wake Word Logic Error:", err);
+      }
+    };
+
+    manageListening();
 
     return () => {
-        if(model) model.stopListening().catch(() => {});
+        isCancelled = true;
+        if (model) model.stopListening().catch(() => {});
     };
-  }, [model, isRecording, isModelLoading]);
+  }, [model, isRecording, isModelLoading, isWakeWordEnabled]);
 
 
   const triggerWakeWordRecording = async () => {
+    // Visual feedback
     setIsWakeWordTriggered(true);
+    // Start Recording with VAD enabled (pass true)
     await startRecordingLogic(true);
   };
 
@@ -445,7 +470,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   };
 
-  // --- RECORDING LOGIC ---
+  // --- RECORDING LOGIC (Refactored) ---
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -457,7 +482,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   }, [messages, isLoading]);
 
-  // VAD HELPER (Silence Detection)
+  // VAD HELPER FUNCTION
   const setupVAD = (stream: MediaStream) => {
     try {
         const audioContext = new AudioContext();
@@ -474,9 +499,9 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         const checkAudio = () => {
             analyser.getByteFrequencyData(dataArray);
             
-            // Calc volume
+            // Calculate average volume
             const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            const THRESHOLD = 15; 
+            const THRESHOLD = 30; 
             
             if (volume > THRESHOLD) {
                 silenceStart = Date.now();
@@ -485,13 +510,11 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
             
             const timeSinceSilence = Date.now() - silenceStart;
 
-            // If spoken and silent for 1.5s -> Stop
             if (hasSpoken && timeSinceSilence > 1500) {
                 stopRecordingLogic();
                 return;
             }
             
-            // If never spoken for 4s -> Timeout/Stop
             if (!hasSpoken && timeSinceSilence > 4000) {
                 stopRecordingLogic();
                 return;
@@ -525,26 +548,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         return;
       }
 
-      // --- SMART MIME TYPE DETECTION (FIX FOR IOS) ---
-      // iOS prefers mp4/aac. Android prefers webm/opus.
-      // We check what the browser supports before forcing 'audio/webm'.
-      const types = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4", 
-        "audio/aac"
-      ];
-      
-      // Find the first supported type
-      const selectedType = types.find(type => MediaRecorder.isTypeSupported(type)) || "";
-      
-      // Store it so we use the SAME type when creating the Blob
-      mimeTypeRef.current = selectedType;
-
-      // Pass the valid type (or undefined to let browser pick default)
-      const options = selectedType ? { mimeType: selectedType } : undefined;
-      const mediaRecorder = new MediaRecorder(stream, options);
-      
+      const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
@@ -556,16 +560,11 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         if (duration < 500) {
           showToast(dict.holdToRecord);
         } else {
-          // --- IMPORTANT FIX ---
-          // Use the actual mime type used by the recorder (or the one we selected)
-          // If we forced 'audio/webm' here but iOS recorded 'audio/mp4', it would break.
-          const finalType = mediaRecorder.mimeType || mimeTypeRef.current || "audio/webm"; 
-          
-          handleSend(new Blob(audioChunksRef.current, { type: finalType }), true);
+          handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
         }
         
         setIsRecording(false);
-        setIsWakeWordTriggered(false);
+        setIsWakeWordTriggered(false); 
       };
       
       mediaRecorder.start();
@@ -590,7 +589,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     isPressingRef.current = false;
     if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
     
-    // Clean up VAD
     if (vadCleanupRef.current) {
         vadCleanupRef.current();
         vadCleanupRef.current = null;
@@ -622,11 +620,11 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       id: msgId,
       type: 'user', 
       content: isAudio ? dict.voiceMessage : (content as string),
-      // Safe blob URL creation now that type matches content
       audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
     }]);
 
-    const history = messages.slice(-6).map(m => ({
+    // Use Refs for history to ensure latest messages are used
+    const history = messagesRef.current.slice(-6).map(m => ({
         role: m.type === 'user' ? 'User' : 'AI',
         content: m.transcription || m.content || "" 
     }));
@@ -639,7 +637,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       if (isAudio) {
         const formData = new FormData();
         formData.append('audio', content as Blob);
-        formData.append('currentTasks', JSON.stringify(tasks));
+        // Use tasksRef.current to avoid stale state in callback
+        formData.append('currentTasks', JSON.stringify(tasksRef.current));
         formData.append('language', lang); 
         formData.append('history', JSON.stringify(history));
 
@@ -650,7 +649,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
              text: content, 
-             currentTasks: tasks, 
+             // Use tasksRef.current
+             currentTasks: tasksRef.current, 
              language: lang,
              history: history 
           }) 
@@ -727,6 +727,28 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
             className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95"
             style={{ top: menuPosition.top, right: menuPosition.right }}
           >
+             <button
+               disabled={isModelLoading}
+               onClick={() => {
+                 setIsWakeWordEnabled(!isWakeWordEnabled);
+                 setIsOptionsMenuOpen(false);
+                 showToast(isWakeWordEnabled ? "Wake Word Disabled" : "Wake Word Enabled");
+               }}
+               className={`w-full text-left px-4 py-3 text-sm flex items-center gap-2 cursor-pointer border-b transition-colors ${
+                 isModelLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+               }`}
+             >
+                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                <div className="flex-1 text-gray-700">Wake Word</div>
+                <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    isWakeWordEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'
+                }`}>
+                    {isWakeWordEnabled ? 'ON' : 'OFF'}
+                </div>
+             </button>
+
              {canShare && (
                 <button onClick={handleShareList} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
