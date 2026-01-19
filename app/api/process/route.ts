@@ -14,9 +14,13 @@ const PROMPTS = {
     3. Extract dates/times intelligently.
     4. Answer questions about the user's schedule based on the Current Tasks.
 
+    [APP INTERFACE & NAVIGATION]
+    - **Open Tasks:** The Task List is hidden by default. Tell the user to click the button on the **BOTTOM LEFT** of the screen to open/close it.
+    - **Export/Share:** To export (Google Tasks/Calendar) or Share, the user must first open the Task List (bottom left), then click the **Menu (...) button** at the top of the list.
+    - **Voice Messages:** To send an audio message, the user must **HOLD** the microphone button (bottom center). A quick click will only show a warning instruction.
+
     [STRICT BOUNDARIES]
     - You CANNOT access external calendars/apps directly.
-    - However, the APP supports exporting to **Google Tasks** and **Google Calendar**. Guide the user to the menu if asked.
     - If the user asks "What do I have today?", READ the "Current Tasks" provided and summarize in the 'summary' field.
 
     [TASK STRUCTURE]
@@ -56,9 +60,13 @@ const PROMPTS = {
     3. Extrair datas/horários inteligentemente.
     4. Responder perguntas sobre a agenda do usuário com base nas "Tarefas Atuais".
 
+    [INTERFACE E NAVEGAÇÃO DO APP]
+    - **Abrir Tarefas:** A lista de tarefas fica oculta. Avise o usuário para clicar no botão no **CANTO INFERIOR ESQUERDO** da tela para abrir/fechar.
+    - **Exportar/Compartilhar:** Para exportar (Google Tasks/Calendar) ou Compartilhar, o usuário deve primeiro abrir a Lista de Tarefas (inferior esquerdo) e depois clicar no **botão de Menu (...)** no topo da lista.
+    - **Mensagens de Voz:** Para enviar áudio, o usuário deve **SEGURAR** o botão do microfone (centro inferior). Um clique rápido apenas exibe um aviso de instrução.
+
     [FRONTEIRAS ESTRITAS]
     - Você NÃO acessa calendários externos diretamente.
-    - Porém, o APP suporta exportação para **Google Tasks** e **Google Calendar**. Guie o usuário para o menu se solicitado.
     - Se o usuário perguntar "O que tenho para hoje?", LEIA as "Tarefas Atuais" e resuma no campo 'summary'.
 
     [ESTRUTURA DA TAREFA]
@@ -98,6 +106,7 @@ export async function POST(req: NextRequest) {
     let userText = "";
     let currentTasks = [];
     let language = "en-US";
+    let history: { role: string, content: string }[] = [];
     const now = new Date().toISOString();
 
     if (contentType.includes("multipart/form-data")) {
@@ -105,9 +114,11 @@ export async function POST(req: NextRequest) {
       const audioFile = formData.get("audio") as File;
       const tasksJson = formData.get("currentTasks") as string;
       const langParam = formData.get("language") as string;
+      const historyJson = formData.get("history") as string;
       
       if (tasksJson) currentTasks = JSON.parse(tasksJson);
       if (langParam) language = langParam;
+      if (historyJson) history = JSON.parse(historyJson);
 
       if (!audioFile) {
         return NextResponse.json({ error: "Audio not provided" }, { status: 400 });
@@ -118,9 +129,14 @@ export async function POST(req: NextRequest) {
       
       const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
 
+      const historyText = history.map(m => `${m.role}: ${m.content}`).join('\n');
+
       const result = await model.generateContent([
         systemPrompt,
         `Current Date/Time: ${now}`,
+        `[CONVERSATION HISTORY - FOR CONTEXT ONLY]
+        (Use this to resolve references like "it", "change that", etc. DO NOT assume these tasks exist unless they are in 'Current Tasks' below.)
+        ${historyText}`,
         `Current Tasks (DO NOT DELETE UNLESS ASKED): ${JSON.stringify(currentTasks)}`,
         {
           inlineData: {
@@ -136,11 +152,18 @@ export async function POST(req: NextRequest) {
       userText = body.text || "";
       currentTasks = body.currentTasks || [];
       if (body.language) language = body.language;
+      if (body.history) history = body.history;
       
       const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
+      const historyText = history.map(m => `${m.role}: ${m.content}`).join('\n');
       
       const prompt = `${systemPrompt}
       Current Date/Time: ${now}
+      
+      [CONVERSATION HISTORY - FOR CONTEXT ONLY]
+      (Use this to resolve references like "it", "change that", etc. DO NOT assume these tasks exist unless they are in 'Current Tasks' below.)
+      ${historyText}
+      
       Current Tasks (DO NOT DELETE UNLESS ASKED): ${JSON.stringify(currentTasks)}
       User Input: ${userText}`;
       

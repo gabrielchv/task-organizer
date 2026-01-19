@@ -124,7 +124,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const audioChunksRef = useRef<Blob[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
-  const isPressingRef = useRef(false); // Tracks physical button state
+  const isPressingRef = useRef(false); 
   const optionsMenuRef = useRef<HTMLButtonElement>(null);
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -374,14 +374,13 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   }, [messages, isLoading]);
 
   const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); // Prevent ghost events
+    e.preventDefault(); 
     isPressingRef.current = true;
     startTimeRef.current = Date.now();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // If user released button while waiting for permission/stream
       if (!isPressingRef.current) {
         stream.getTracks().forEach(track => track.stop());
         showToast(dict.holdToRecord);
@@ -397,7 +396,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         stream.getTracks().forEach(track => track.stop());
         const duration = Date.now() - startTimeRef.current;
         
-        // Show warning if held for less than 500ms
         if (duration < 500) {
           showToast(dict.holdToRecord);
         } else {
@@ -436,6 +434,12 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
     }]);
 
+    // PREPARE HISTORY FOR API (Last 6 messages)
+    const history = messages.slice(-6).map(m => ({
+        role: m.type === 'user' ? 'User' : 'AI',
+        content: m.transcription || m.content || "" // Use transcription if audio
+    }));
+
     if (!isAudio) setInputVal("");
     setIsLoading(true);
     if (isAudio) setIsRecording(false);
@@ -447,12 +451,20 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         formData.append('audio', content as Blob);
         formData.append('currentTasks', JSON.stringify(tasks));
         formData.append('language', lang); 
+        // Append History
+        formData.append('history', JSON.stringify(history));
+
         response = await fetch('/api/process', { method: 'POST', body: formData });
       } else {
         response = await fetch('/api/process', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: content, currentTasks: tasks, language: lang }) 
+          body: JSON.stringify({ 
+             text: content, 
+             currentTasks: tasks, 
+             language: lang,
+             history: history 
+          }) 
         });
       }
 
