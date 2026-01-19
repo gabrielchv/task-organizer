@@ -143,11 +143,14 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
   const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Ref to store the ACTUAL mime type used by the browser
+  const mimeTypeRef = useRef<string>("");
+  
   // Ref for VAD (Voice Activity Detection) cleanup
   const vadCleanupRef = useRef<(() => void) | null>(null);
 
   // --- WAKE WORD SETUP ---
-  const WAKE_WORD = "start"; // Your trained keyword
+  const WAKE_WORDS = ["organizer", "organizador"]; 
 
   useEffect(() => {
     loadModel();
@@ -173,28 +176,26 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   };
 
-  // Toggle Listening: Listen when NOT recording, Stop when recording
+  // Toggle Listening
   useEffect(() => {
     if (!model || isModelLoading) return;
 
     if (isRecording) {
-      // Pause detection while recording
       model.stopListening().catch(() => {});
     } else {
-      // Start detection
       model.listen(async (result) => {
         const scores = result.scores as Float32Array;
         const maxScoreIndex = scores.indexOf(Math.max(...scores));
         const detectedWord = model.wordLabels()[maxScoreIndex];
+        const confidence = scores[maxScoreIndex];
         
-        // Threshold > 0.9 for stability
-        if (detectedWord === WAKE_WORD && scores[maxScoreIndex] > 0.90) {
-           console.log("Wake Word Detected!");
+        if (WAKE_WORDS.includes(detectedWord) && confidence > 0.92) {
+           console.log(`Wake Word Detected: ${detectedWord}`);
            triggerWakeWordRecording();
         }
       }, {
         includeSpectrogram: false,
-        probabilityThreshold: 0.85,
+        probabilityThreshold: 0.85, 
         invokeCallbackOnNoiseAndUnknown: true,
         overlapFactor: 0.5 
       }).catch(err => console.error("Listening error:", err));
@@ -207,14 +208,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
 
   const triggerWakeWordRecording = async () => {
-    // Visual feedback
     setIsWakeWordTriggered(true);
-    
-    // Start Recording with VAD enabled (pass true)
     await startRecordingLogic(true);
-    
-    // Note: The fixed 5s timeout is removed. 
-    // The setupVAD logic inside startRecordingLogic will handle the stop.
   };
 
   // --- INITIALIZATION ---
@@ -450,7 +445,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   };
 
-  // --- RECORDING LOGIC (Refactored) ---
+  // --- RECORDING LOGIC ---
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -462,7 +457,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   }, [messages, isLoading]);
 
-  // VAD HELPER FUNCTION
+  // VAD HELPER (Silence Detection)
   const setupVAD = (stream: MediaStream) => {
     try {
         const audioContext = new AudioContext();
@@ -473,19 +468,16 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         let silenceStart = Date.now();
-        let hasSpoken = false; // Flag to ensure we don't stop before the user even starts speaking
+        let hasSpoken = false; 
         let animationFrameId: number;
 
         const checkAudio = () => {
             analyser.getByteFrequencyData(dataArray);
             
-            // Calculate average volume
+            // Calc volume
             const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            const THRESHOLD = 15; 
             
-            // Threshold for silence (adjust if needed, 10-20 is typically good for mic input)
-            const THRESHOLD = 30; 
-            
-            // If volume is above threshold, reset silence timer
             if (volume > THRESHOLD) {
                 silenceStart = Date.now();
                 hasSpoken = true;
@@ -493,18 +485,14 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
             
             const timeSinceSilence = Date.now() - silenceStart;
 
-            // Logic:
-            // 1. If user HAS spoken, wait for 1.5s of silence then stop
-            // 2. If user has NOT spoken yet, wait for 4s total then stop (timeout)
-            
+            // If spoken and silent for 1.5s -> Stop
             if (hasSpoken && timeSinceSilence > 1500) {
-                // Speech ended
                 stopRecordingLogic();
                 return;
             }
             
+            // If never spoken for 4s -> Timeout/Stop
             if (!hasSpoken && timeSinceSilence > 4000) {
-                // No speech detected
                 stopRecordingLogic();
                 return;
             }
@@ -514,7 +502,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         
         checkAudio();
 
-        // Return cleanup function
         return () => {
             cancelAnimationFrame(animationFrameId);
             audioContext.close().catch(console.error);
@@ -525,7 +512,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   };
 
-  // Logic to START recording (can be called by Button or Wake Word)
+  // Logic to START recording
   const startRecordingLogic = async (useVAD = false) => {
     isPressingRef.current = true;
     startTimeRef.current = Date.now();
@@ -533,13 +520,31 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // If user released button very quickly or logic cancelled
       if (!isPressingRef.current) {
         stream.getTracks().forEach(track => track.stop());
         return;
       }
 
-      const mediaRecorder = new MediaRecorder(stream);
+      // --- SMART MIME TYPE DETECTION (FIX FOR IOS) ---
+      // iOS prefers mp4/aac. Android prefers webm/opus.
+      // We check what the browser supports before forcing 'audio/webm'.
+      const types = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4", 
+        "audio/aac"
+      ];
+      
+      // Find the first supported type
+      const selectedType = types.find(type => MediaRecorder.isTypeSupported(type)) || "";
+      
+      // Store it so we use the SAME type when creating the Blob
+      mimeTypeRef.current = selectedType;
+
+      // Pass the valid type (or undefined to let browser pick default)
+      const options = selectedType ? { mimeType: selectedType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
@@ -548,23 +553,26 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         stream.getTracks().forEach(track => track.stop());
         const duration = Date.now() - startTimeRef.current;
         
-        // Minimum duration check
         if (duration < 500) {
           showToast(dict.holdToRecord);
         } else {
-          handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
+          // --- IMPORTANT FIX ---
+          // Use the actual mime type used by the recorder (or the one we selected)
+          // If we forced 'audio/webm' here but iOS recorded 'audio/mp4', it would break.
+          const finalType = mediaRecorder.mimeType || mimeTypeRef.current || "audio/webm"; 
+          
+          handleSend(new Blob(audioChunksRef.current, { type: finalType }), true);
         }
         
         setIsRecording(false);
-        setIsWakeWordTriggered(false); // Reset wake word state
+        setIsWakeWordTriggered(false);
       };
       
       mediaRecorder.start();
       setIsRecording(true);
 
-      // Initialize VAD if requested (Wake Word Mode)
       if (useVAD) {
-          if (vadCleanupRef.current) vadCleanupRef.current(); // Clean prev if any
+          if (vadCleanupRef.current) vadCleanupRef.current(); 
           vadCleanupRef.current = setupVAD(stream) || null;
       }
 
@@ -580,7 +588,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   // Logic to STOP recording
   const stopRecordingLogic = () => {
     isPressingRef.current = false;
-    // Clear auto-stop timeout if it exists (legacy safety)
     if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
     
     // Clean up VAD
@@ -597,11 +604,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   // Button Handlers
   const handleButtonStart = (e: React.MouseEvent | React.TouchEvent) => {
       e.preventDefault();
-      // If already recording (via wake word), do nothing or maybe stop it? 
-      if (isRecording && isWakeWordTriggered) {
-          return;
-      }
-      // Manual press does NOT use VAD (pass false)
+      if (isRecording && isWakeWordTriggered) return;
       startRecordingLogic(false);
   };
 
@@ -619,6 +622,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       id: msgId,
       type: 'user', 
       content: isAudio ? dict.voiceMessage : (content as string),
+      // Safe blob URL creation now that type matches content
       audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
     }]);
 
@@ -629,7 +633,6 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
     if (!isAudio) setInputVal("");
     setIsLoading(true);
-    // Note: setIsRecording(false) is handled in onstop
 
     try {
       let response;
