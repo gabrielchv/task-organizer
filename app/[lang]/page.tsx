@@ -142,6 +142,9 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const optionsMenuRef = useRef<HTMLButtonElement>(null);
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
   const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Ref for VAD (Voice Activity Detection) cleanup
+  const vadCleanupRef = useRef<(() => void) | null>(null);
 
   // --- WAKE WORD SETUP ---
   const WAKE_WORD = "start"; // Your trained keyword
@@ -175,7 +178,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     if (!model || isModelLoading) return;
 
     if (isRecording) {
-      // Pause detection while recording to free up the mic and avoid self-triggering
+      // Pause detection while recording
       model.stopListening().catch(() => {});
     } else {
       // Start detection
@@ -207,14 +210,11 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     // Visual feedback
     setIsWakeWordTriggered(true);
     
-    // Start Recording programmatically
-    await startRecordingLogic();
-
-    // Auto-stop after 5 seconds (Simple VAD replacement)
-    if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
-    wakeWordTimeoutRef.current = setTimeout(() => {
-        stopRecordingLogic();
-    }, 5000); // 5 seconds listening window
+    // Start Recording with VAD enabled (pass true)
+    await startRecordingLogic(true);
+    
+    // Note: The fixed 5s timeout is removed. 
+    // The setupVAD logic inside startRecordingLogic will handle the stop.
   };
 
   // --- INITIALIZATION ---
@@ -462,8 +462,71 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   }, [messages, isLoading]);
 
+  // VAD HELPER FUNCTION
+  const setupVAD = (stream: MediaStream) => {
+    try {
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let silenceStart = Date.now();
+        let hasSpoken = false; // Flag to ensure we don't stop before the user even starts speaking
+        let animationFrameId: number;
+
+        const checkAudio = () => {
+            analyser.getByteFrequencyData(dataArray);
+            
+            // Calculate average volume
+            const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            
+            // Threshold for silence (adjust if needed, 10-20 is typically good for mic input)
+            const THRESHOLD = 30; 
+            
+            // If volume is above threshold, reset silence timer
+            if (volume > THRESHOLD) {
+                silenceStart = Date.now();
+                hasSpoken = true;
+            }
+            
+            const timeSinceSilence = Date.now() - silenceStart;
+
+            // Logic:
+            // 1. If user HAS spoken, wait for 1.5s of silence then stop
+            // 2. If user has NOT spoken yet, wait for 4s total then stop (timeout)
+            
+            if (hasSpoken && timeSinceSilence > 1500) {
+                // Speech ended
+                stopRecordingLogic();
+                return;
+            }
+            
+            if (!hasSpoken && timeSinceSilence > 4000) {
+                // No speech detected
+                stopRecordingLogic();
+                return;
+            }
+
+            animationFrameId = requestAnimationFrame(checkAudio);
+        };
+        
+        checkAudio();
+
+        // Return cleanup function
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+            audioContext.close().catch(console.error);
+        };
+    } catch (e) {
+        console.error("VAD Setup Error:", e);
+        return () => {};
+    }
+  };
+
   // Logic to START recording (can be called by Button or Wake Word)
-  const startRecordingLogic = async () => {
+  const startRecordingLogic = async (useVAD = false) => {
     isPressingRef.current = true;
     startTimeRef.current = Date.now();
 
@@ -498,6 +561,13 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       
       mediaRecorder.start();
       setIsRecording(true);
+
+      // Initialize VAD if requested (Wake Word Mode)
+      if (useVAD) {
+          if (vadCleanupRef.current) vadCleanupRef.current(); // Clean prev if any
+          vadCleanupRef.current = setupVAD(stream) || null;
+      }
+
     } catch (err) { 
       console.error(err);
       showToast("Microphone denied"); 
@@ -510,9 +580,15 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   // Logic to STOP recording
   const stopRecordingLogic = () => {
     isPressingRef.current = false;
-    // Clear auto-stop timeout if it exists
+    // Clear auto-stop timeout if it exists (legacy safety)
     if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
     
+    // Clean up VAD
+    if (vadCleanupRef.current) {
+        vadCleanupRef.current();
+        vadCleanupRef.current = null;
+    }
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
@@ -522,12 +598,11 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const handleButtonStart = (e: React.MouseEvent | React.TouchEvent) => {
       e.preventDefault();
       // If already recording (via wake word), do nothing or maybe stop it? 
-      // Let's assume pressing button overrides wake word timer and holds it.
       if (isRecording && isWakeWordTriggered) {
-          if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
           return;
       }
-      startRecordingLogic();
+      // Manual press does NOT use VAD (pass false)
+      startRecordingLogic(false);
   };
 
   const handleButtonStop = (e: React.MouseEvent | React.TouchEvent) => {
