@@ -23,7 +23,7 @@ export default function AuthButton({ label }: { label?: string }) {
         )}
         <button 
           onClick={logout}
-          className="text-xs text-gray-500 hover:text-red-500 transition-colors font-medium whitespace-nowrap"
+          className="text-xs cursor-pointer font-semibold text-gray-500 hover:text-red-500 transition-colors font-medium whitespace-nowrap"
         >
           {label || "Sign Out"}
         </button>
