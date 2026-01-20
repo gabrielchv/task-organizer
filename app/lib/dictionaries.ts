@@ -27,7 +27,18 @@ const dictionaries = {
     dateNotSet: "No date",
     backToChat: "Back to Chat",
     category: "Category",
-    date: "Date"
+    date: "Date",
+    // --- Landing Page ---
+    heroTitle: "Organize your life with AI",
+    heroSubtitle: "Manage tasks with voice commands, intelligent categorization, and real-time synchronization.",
+    ctaStart: "Get Started",
+    featureVoiceTitle: "Voice Commands",
+    featureVoiceDesc: "Add tasks just by speaking. Say the wake word and go.",
+    featureCatTitle: "AI Categorization",
+    featureCatDesc: "Your tasks are automatically organized by context and date.",
+    featureSyncTitle: "Cloud Sync",
+    featureSyncDesc: "Access your tasks on any device with Google login.",
+    footerBy: "Task Organizer AI. By",
   },
   'pt-BR': {
     title: "Organizador de Tarefas",
@@ -57,7 +68,18 @@ const dictionaries = {
     dateNotSet: "Sem data",
     backToChat: "Voltar ao Chat",
     category: "Categoria",
-    date: "Data"
+    date: "Data",
+    // --- Landing Page ---
+    heroTitle: "Organize sua vida com IA",
+    heroSubtitle: "Gerencie tarefas com comandos de voz, categorização inteligente e sincronização em tempo real.",
+    ctaStart: "Começar Agora",
+    featureVoiceTitle: "Comandos de Voz",
+    featureVoiceDesc: "Adicione tarefas apenas falando. Diga a palavra mágica e comece.",
+    featureCatTitle: "Categorização IA",
+    featureCatDesc: "Suas tarefas são organizadas automaticamente por contexto e data.",
+    featureSyncTitle: "Sincronização Cloud",
+    featureSyncDesc: "Acesse suas tarefas em qualquer dispositivo com login Google.",
+    footerBy: "Task Organizer AI. Por",
   },
 };
 
