@@ -28,6 +28,9 @@ const dictionaries = {
     backToChat: "Back to Chat",
     category: "Category",
     date: "Date",
+    wakeWord: "Wake Word",
+    on: "On",
+    off: "Off",
     // --- Landing Page ---
     heroTitle: "Organize your life with AI",
     heroSubtitle: "Manage tasks with voice commands, intelligent categorization, and real-time synchronization.",
@@ -69,6 +72,9 @@ const dictionaries = {
     backToChat: "Voltar ao Chat",
     category: "Categoria",
     date: "Data",
+    wakeWord: "Auto Ativação",
+    on: "Ligado",
+    off: "Desligado",
     // --- Landing Page ---
     heroTitle: "Organize sua vida com IA",
     heroSubtitle: "Gerencie tarefas com comandos de voz, categorização inteligente e sincronização em tempo real.",

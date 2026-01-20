@@ -74,7 +74,7 @@ export default async function LandingPage({ params }: { params: Promise<{ lang: 
 
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <Link 
-            href={`/app`}
+            href={`/chat`}
             className="px-8 py-4 bg-blue-600 text-white rounded-full font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
           >
             {content.cta}
