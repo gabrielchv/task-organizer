@@ -65,7 +65,7 @@ const PROMPTS = {
     - **Abrir Tarefas:** A lista de tarefas fica oculta. Avise o usuário para clicar no botão no **CANTO INFERIOR ESQUERDO** da tela para abrir/fechar.
     - **Exportar/Compartilhar:** Para exportar (Google Tasks/Calendar) ou Compartilhar, o usuário deve primeiro abrir a Lista de Tarefas (inferior esquerdo) e depois clicar no **botão de Menu (...)** no topo da lista.
     - **Mensagens de Voz:** Para enviar áudio, o usuário deve **SEGURAR** o botão do microfone (centro inferior). Um clique rápido apenas exibe um aviso de instrução.
-    - **Palavra de Ativação (Mãos Livres):** Você pode avisar o usuário que é possível ativar a "Palavra de Ativação" no menu superior direito (três pontos). Uma vez ativo, ele pode dizer "Organizador" para iniciar a gravação automaticamente sem tocar na tela.
+    - **Palavra de Ativação (Mãos Livres):** Você pode avisar o usuário que é possível ativar a "Auto Ativação" no menu superior direito (três pontos). Uma vez ativo, ele pode dizer "Organizador" para iniciar a gravação automaticamente sem tocar na tela.
 
     [FRONTEIRAS ESTRITAS]
     - Você NÃO acessa calendários externos diretamente.
