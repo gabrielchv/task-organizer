@@ -4,103 +4,19 @@ import { useState, useRef, useEffect, use } from "react";
 import { createPortal } from "react-dom"; 
 import { useAuth } from "../context/AuthContext";
 import AuthButton from "../components/AuthButton";
-import { db } from "../lib/firebase";
 import { getDictionary } from "../lib/dictionaries";
-import { 
-  collection, 
-  query, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  writeBatch 
-} from "firebase/firestore";
 
-// --- TENSORFLOW IMPORTS ---
-import * as tf from "@tensorflow/tfjs";
-import * as speechCommands from "@tensorflow-models/speech-commands";
-import "@tensorflow/tfjs-backend-webgl";
-import "@tensorflow/tfjs-backend-cpu";
+// Shared Types
+import { Message, ApiResponse } from "../types";
 
-interface Task {
-  id: string;
-  title: string;
-  status: 'pending' | 'completed';
-  category?: string;
-  date?: string | null;
-}
+// Hooks
+import { useTaskManager } from "../hooks/useTaskManager";
+import { useAudioRecorder } from "../hooks/useAudioRecorder";
+import { useWakeWord } from "../hooks/useWakeWord";
 
-interface ApiResponse {
-  summary: string;
-  tasks: Task[];
-  transcription?: string;
-  error?: string;
-}
-
-interface Message {
-  id: string;
-  type: 'user' | 'bot';
-  content?: string;
-  audioUrl?: string;
-  transcription?: string;
-}
-
-// --- SUB-COMPONENTS ---
-
-function TaskListSkeleton() {
-  return (
-    <div className="p-4 space-y-3 animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-1/3 mb-4"></div>
-      {[1, 2, 3].map(i => (
-        <div key={i} className="flex flex-col gap-2">
-           <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-           <div className="h-10 bg-gray-100 rounded w-full"></div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
-  const [showTranscription, setShowTranscription] = useState(false);
-  const isUser = msg.type === 'user';
-
-  return (
-    <div 
-      className={`p-3 rounded-2xl max-w-[85%] text-sm shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 flex flex-col gap-2 ${
-        isUser 
-          ? 'bg-blue-600 text-white self-end ml-auto rounded-tr-none' 
-          : 'bg-white text-gray-800 self-start border border-gray-100 rounded-tl-none'
-      }`}
-    >
-      {msg.audioUrl && (
-        <div className="w-full min-w-[200px]">
-          <audio 
-            controls 
-            src={msg.audioUrl} 
-            className="w-full h-8 rounded opacity-90 contrast-125 mix-blend-screen cursor-pointer"
-            style={{ filter: isUser ? 'invert(1) hue-rotate(180deg)' : 'none' }}
-          />
-        </div>
-      )}
-
-      {msg.audioUrl && msg.transcription && (
-        <button 
-          onClick={() => setShowTranscription(!showTranscription)}
-          className="text-[10px] uppercase font-bold tracking-wider opacity-70 hover:opacity-100 transition-opacity self-start flex items-center gap-1 cursor-pointer"
-        >
-          {showTranscription ? dict.hideTranscription : dict.showTranscription}
-        </button>
-      )}
-
-      {(!msg.audioUrl || showTranscription) && (
-        <div className={`break-words ${msg.audioUrl && isUser ? 'text-blue-100 italic' : ''}`}>
-           {msg.audioUrl ? (msg.transcription || "Transcribing...") : msg.content}
-        </div>
-      )}
-    </div>
-  );
-};
+// Components
+import TaskSidebar from "../components/TaskSidebar";
+import ChatArea from "../components/ChatArea";
 
 export default function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = use(params);
@@ -108,237 +24,117 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   
   const { user, googleAccessToken, signInWithGoogle, loading: authLoading } = useAuth();
   
-  // --- STATE ---
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // --- UI STATE ---
+  const [showTaskMenu, setShowTaskMenu] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
+  const optionsMenuRef = useRef<HTMLButtonElement>(null);
+  const optionsDropdownRef = useRef<HTMLDivElement>(null);
+  const [canShare, setCanShare] = useState(false);
+
+  // --- CHAT STATE ---
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   
-  // Use Refs to access latest state inside async callbacks (Wake Word / VAD)
-  const tasksRef = useRef(tasks);
+  // Keep ref for history in callbacks
   const messagesRef = useRef(messages);
-
-  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
-  
-  // Recording State
-  const [isRecording, setIsRecording] = useState(false);
-  const [isWakeWordTriggered, setIsWakeWordTriggered] = useState(false);
-  
-  const [toast, setToast] = useState<string | null>(null);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
-  
-  // Wake Word State
-  const [model, setModel] = useState<speechCommands.SpeechCommandRecognizer | null>(null);
-  const [isModelLoading, setIsModelLoading] = useState(true);
-  const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(false); 
 
-  // UI State
-  const [showTaskMenu, setShowTaskMenu] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
-  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
-  
-  // Feature flags
-  const [canShare, setCanShare] = useState(false);
-
-  // Refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const startTimeRef = useRef<number>(0);
-  const isPressingRef = useRef(false); 
-  const optionsMenuRef = useRef<HTMLButtonElement>(null);
-  const optionsDropdownRef = useRef<HTMLDivElement>(null);
-  const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Ref for VAD (Voice Activity Detection) cleanup
-  const vadCleanupRef = useRef<(() => void) | null>(null);
-
-  // --- WAKE WORD SETUP ---
-  const WAKE_WORD = "organizer"; 
-
-  useEffect(() => {
-    loadModel();
-  }, []);
-
-  const loadModel = async () => {
-    try {
-      await tf.ready();
-      const baseUrl = window.location.origin;
-      const recognizer = speechCommands.create(
-        "BROWSER_FFT", 
-        undefined, 
-        `${baseUrl}/model/task-organizer-model.json`, 
-        `${baseUrl}/model/metadata.json`
-      );
-      await recognizer.ensureModelLoaded();
-      setModel(recognizer);
-      setIsModelLoading(false);
-    } catch (error) {
-      console.error("Model Error:", error);
-      setIsModelLoading(false);
-    }
+  // --- LOGIC HOOKS ---
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
   };
 
-  // Toggle Listening: Robust Async Handling
-  useEffect(() => {
-    if (!model || isModelLoading) return;
+  const { 
+    tasks, tasksRef, isDataLoaded, saveLocal, toggleTask, deleteTask, syncFirestoreFromAI 
+  } = useTaskManager(user, authLoading, dict, showToast);
 
-    let isCancelled = false;
+  const { 
+    isRecording, isWakeWordTriggered, startRecordingLogic, stopRecordingLogic, triggerWakeWordRecording 
+  } = useAudioRecorder({
+    onRecordingComplete: (blob) => handleSend(blob, true),
+    showToast,
+    dict
+  });
 
-    const manageListening = async () => {
-      try {
-        // Force stop ANY existing listeners first to prevent conflicts
-        if (model.isListening()) {
-            await model.stopListening().catch(() => {});
-        }
+  const { isModelLoading, isWakeWordEnabled, setIsWakeWordEnabled } = useWakeWord(isRecording, triggerWakeWordRecording);
 
-        if (isCancelled) return;
-
-        // Only start if enabled AND not currently recording
-        if (isWakeWordEnabled && !isRecording) {
-            await model.listen(async (result) => {
-                if (isCancelled) return;
-                
-                const scores = result.scores as Float32Array;
-                const maxScore = Math.max(...scores);
-                const maxScoreIndex = scores.indexOf(maxScore);
-                const detectedWord = model.wordLabels()[maxScoreIndex];
-                
-                // Strict threshold check
-                if (detectedWord === WAKE_WORD && maxScore > 0.90) {
-                   triggerWakeWordRecording();
-                }
-            }, {
-                includeSpectrogram: false,
-                probabilityThreshold: 0.85, 
-                invokeCallbackOnNoiseAndUnknown: true,
-                overlapFactor: 0.5 
-            });
-        }
-      } catch (err) {
-        console.error("Wake Word Logic Error:", err);
-      }
-    };
-
-    manageListening();
-
-    return () => {
-        isCancelled = true;
-        if (model) model.stopListening().catch(() => {});
-    };
-  }, [model, isRecording, isModelLoading, isWakeWordEnabled]);
-
-
-  const triggerWakeWordRecording = async () => {
-    // Visual feedback
-    setIsWakeWordTriggered(true);
-    // Start Recording with VAD enabled (pass true)
-    await startRecordingLogic(true);
-  };
-
-  // --- INITIALIZATION ---
+  // --- INIT ---
   useEffect(() => {
     setMessages(prev => {
         if (prev.length === 0) return [{ id: 'init', type: 'bot', content: dict.greeting }];
         return prev;
     });
+    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
   }, [dict.greeting]);
 
-  useEffect(() => {
-    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
-  }, []);
+  // --- API HANDLER ---
+  const handleSend = async (content: string | Blob, isAudio: boolean) => {
+    if (!isAudio && !(content as string).trim()) return;
+    const msgId = Date.now().toString();
+    
+    setMessages(prev => [...prev, { 
+      id: msgId,
+      type: 'user', 
+      content: isAudio ? dict.voiceMessage : (content as string),
+      audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
+    }]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isOptionsMenuOpen &&
-        optionsMenuRef.current && 
-        !optionsMenuRef.current.contains(event.target as Node) &&
-        optionsDropdownRef.current &&
-        !optionsDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOptionsMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOptionsMenuOpen]);
+    const history = messagesRef.current.slice(-6).map(m => ({
+        role: m.type === 'user' ? 'User' : 'AI',
+        content: m.transcription || m.content || "" 
+    }));
 
-  const toggleOptionsMenu = () => {
-    if (isOptionsMenuOpen) {
-      setIsOptionsMenuOpen(false);
-    } else {
-      if (optionsMenuRef.current) {
-        const rect = optionsMenuRef.current.getBoundingClientRect();
-        setMenuPosition({
-          top: rect.bottom + 8, 
-          right: window.innerWidth - rect.right
+    if (!isAudio) setInputVal("");
+    setIsLoading(true);
+
+    try {
+      let response;
+      if (isAudio) {
+        const formData = new FormData();
+        formData.append('audio', content as Blob);
+        formData.append('currentTasks', JSON.stringify(tasksRef.current));
+        formData.append('language', lang); 
+        formData.append('history', JSON.stringify(history));
+
+        response = await fetch('/api/process', { method: 'POST', body: formData });
+      } else {
+        response = await fetch('/api/process', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+             text: content, 
+             currentTasks: tasksRef.current, 
+             language: lang,
+             history: history 
+          }) 
         });
       }
-      setIsOptionsMenuOpen(true);
+
+      const data: ApiResponse = await response.json();
+      
+      if (isAudio && data.transcription) {
+          setMessages(prev => prev.map(msg => msg.id === msgId ? { ...msg, transcription: data.transcription } : msg));
+      }
+
+      if (data.tasks) {
+        setMessages(prev => [...prev, { id: Date.now().toString() + 'bot', type: 'bot', content: data.summary || dict.updated }]);
+        if (user) await syncFirestoreFromAI(data.tasks);
+        else saveLocal(data.tasks);
+      } else {
+        setMessages(prev => [...prev, { id: Date.now().toString() + 'err', type: 'bot', content: dict.error }]);
+      }
+    } catch (error) {
+      showToast("Connection error");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // --- MIGRATION & SYNC ---
-  const migrateGuestTasks = async (userId: string) => {
-    const savedGuest = localStorage.getItem("guest_tasks");
-    if (!savedGuest) return;
-    try {
-      const localTasks: Task[] = JSON.parse(savedGuest);
-      if (localTasks.length === 0) return;
-      const batch = writeBatch(db);
-      const userTasksRef = collection(db, "users", userId, "tasks");
-      localTasks.forEach(task => {
-        const docRef = doc(userTasksRef, task.id); 
-        batch.set(docRef, task, { merge: true });
-      });
-      await batch.commit();
-      localStorage.removeItem("guest_tasks");
-      showToast(dict.localSynced);
-    } catch (e) { console.error(e); }
-  };
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (user) {
-      migrateGuestTasks(user.uid);
-      const q = query(collection(db, "users", user.uid, "tasks"));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const dbTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[];
-        setTasks(dbTasks);
-        setIsDataLoaded(true);
-      });
-      return () => unsubscribe();
-    } else {
-      const saved = localStorage.getItem("guest_tasks");
-      if (saved) setTasks(JSON.parse(saved));
-      setIsDataLoaded(true);
-    }
-  }, [user, authLoading]); 
-
-  const saveLocal = (newTasks: Task[]) => {
-    setTasks(newTasks);
-    localStorage.setItem("guest_tasks", JSON.stringify(newTasks));
-  };
-
-  const syncFirestoreFromAI = async (newTasksState: Task[]) => {
-    if (!user) return;
-    try {
-      const batch = writeBatch(db);
-      const userTasksRef = collection(db, "users", user.uid, "tasks");
-      const newIds = new Set(newTasksState.map(t => t.id));
-      tasks.forEach(currentTask => {
-        if (!newIds.has(currentTask.id)) batch.delete(doc(userTasksRef, currentTask.id));
-      });
-      newTasksState.forEach(newTask => {
-        batch.set(doc(userTasksRef, newTask.id), newTask, { merge: true });
-      });
-      await batch.commit();
-    } catch (e) { console.error(e); }
-  };
-
-  // --- EXPORT & ACTIONS ---
+  // --- ACTIONS (Exports/Sharing) ---
   const getFormattedList = () => {
     return tasks.map(t => 
       `[${t.status === 'completed' ? 'x' : ' '}] ${t.title} (${t.date ? t.date : ''})`
@@ -379,11 +175,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       for (const task of pendingTasks) {
         const payload: any = { title: task.title };
         if (task.date) {
-            if (task.date.length === 10) {
-               payload.due = task.date + 'T00:00:00.000Z'; 
-            } else {
-               payload.due = new Date(task.date).toISOString();
-            }
+            if (task.date.length === 10) payload.due = task.date + 'T00:00:00.000Z'; 
+            else payload.due = new Date(task.date).toISOString();
         }
         const response = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
           method: 'POST',
@@ -412,9 +205,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     try {
       let count = 0;
       for (const task of datedTasks) {
-         let start: any = {};
-         let end: any = {};
-
+         let start: any = {}, end: any = {};
          if (task.date && task.date.length === 10) {
              start = { date: task.date };
              const nextDay = new Date(task.date);
@@ -430,11 +221,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
          const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                summary: task.title,
-                start,
-                end
-            })
+            body: JSON.stringify({ summary: task.title, start, end })
          });
          if (response.ok) count++;
       }
@@ -442,263 +229,39 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     } catch (e) { showToast("Failed to export"); }
   };
 
-  const toggleTask = async (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    const newStatus: Task['status'] = task.status === 'completed' ? 'pending' : 'completed';
-    
-    const newTasks = tasks.map(t => 
-        t.id === taskId ? { ...t, status: newStatus } : t
-    ) as Task[];
-    
-    setTasks(newTasks);
-
-    if (user) {
-      await setDoc(doc(db, "users", user.uid, "tasks", taskId), { status: newStatus }, { merge: true });
-    } else {
-      saveLocal(newTasks);
-    }
-  };
-
-  const deleteTask = async (taskId: string) => {
-    const newTasks = tasks.filter(t => t.id !== taskId);
-    setTasks(newTasks);
-    if (user) {
-      await deleteDoc(doc(db, "users", user.uid, "tasks", taskId));
-    } else {
-      saveLocal(newTasks);
-    }
-  };
-
-  // --- RECORDING LOGIC (Refactored) ---
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
-
+  // --- MENU HANDLER ---
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
-    }
-  }, [messages, isLoading]);
-
-  // VAD HELPER FUNCTION
-  const setupVAD = (stream: MediaStream) => {
-    try {
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
-        source.connect(analyser);
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        let silenceStart = Date.now();
-        let hasSpoken = false; 
-        let animationFrameId: number;
-
-        const checkAudio = () => {
-            analyser.getByteFrequencyData(dataArray);
-            
-            // Calculate average volume
-            const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            const THRESHOLD = 30; 
-            
-            if (volume > THRESHOLD) {
-                silenceStart = Date.now();
-                hasSpoken = true;
-            }
-            
-            const timeSinceSilence = Date.now() - silenceStart;
-
-            if (hasSpoken && timeSinceSilence > 1500) {
-                stopRecordingLogic();
-                return;
-            }
-            
-            if (!hasSpoken && timeSinceSilence > 4000) {
-                stopRecordingLogic();
-                return;
-            }
-
-            animationFrameId = requestAnimationFrame(checkAudio);
-        };
-        
-        checkAudio();
-
-        return () => {
-            cancelAnimationFrame(animationFrameId);
-            audioContext.close().catch(console.error);
-        };
-    } catch (e) {
-        console.error("VAD Setup Error:", e);
-        return () => {};
-    }
-  };
-
-  // Logic to START recording
-  const startRecordingLogic = async (useVAD = false) => {
-    isPressingRef.current = true;
-    startTimeRef.current = Date.now();
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      if (!isPressingRef.current) {
-        stream.getTracks().forEach(track => track.stop());
-        return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isOptionsMenuOpen &&
+        optionsMenuRef.current && 
+        !optionsMenuRef.current.contains(event.target as Node) &&
+        optionsDropdownRef.current &&
+        !optionsDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOptionsMenuOpen(false);
       }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOptionsMenuOpen]);
 
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach(track => track.stop());
-        const duration = Date.now() - startTimeRef.current;
-        
-        if (duration < 500) {
-          showToast(dict.holdToRecord);
-        } else {
-          handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
-        }
-        
-        setIsRecording(false);
-        setIsWakeWordTriggered(false); 
-      };
-      
-      mediaRecorder.start();
-      setIsRecording(true);
-
-      if (useVAD) {
-          if (vadCleanupRef.current) vadCleanupRef.current(); 
-          vadCleanupRef.current = setupVAD(stream) || null;
-      }
-
-    } catch (err) { 
-      console.error(err);
-      showToast("Microphone denied"); 
-      setIsRecording(false);
-      isPressingRef.current = false;
-      setIsWakeWordTriggered(false);
-    }
-  };
-
-  // Logic to STOP recording
-  const stopRecordingLogic = () => {
-    isPressingRef.current = false;
-    if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
-    
-    if (vadCleanupRef.current) {
-        vadCleanupRef.current();
-        vadCleanupRef.current = null;
-    }
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
-  // Button Handlers
-  const handleButtonStart = (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      if (isRecording && isWakeWordTriggered) return;
-      startRecordingLogic(false);
-  };
-
-  const handleButtonStop = (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault();
-      stopRecordingLogic();
-  };
-
-  // --- SENDING ---
-  const handleSend = async (content: string | Blob, isAudio: boolean) => {
-    if (!isAudio && !(content as string).trim()) return;
-    const msgId = Date.now().toString();
-    
-    setMessages(prev => [...prev, { 
-      id: msgId,
-      type: 'user', 
-      content: isAudio ? dict.voiceMessage : (content as string),
-      audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
-    }]);
-
-    // Use Refs for history to ensure latest messages are used
-    const history = messagesRef.current.slice(-6).map(m => ({
-        role: m.type === 'user' ? 'User' : 'AI',
-        content: m.transcription || m.content || "" 
-    }));
-
-    if (!isAudio) setInputVal("");
-    setIsLoading(true);
-
-    try {
-      let response;
-      if (isAudio) {
-        const formData = new FormData();
-        formData.append('audio', content as Blob);
-        // Use tasksRef.current to avoid stale state in callback
-        formData.append('currentTasks', JSON.stringify(tasksRef.current));
-        formData.append('language', lang); 
-        formData.append('history', JSON.stringify(history));
-
-        response = await fetch('/api/process', { method: 'POST', body: formData });
-      } else {
-        response = await fetch('/api/process', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-             text: content, 
-             // Use tasksRef.current
-             currentTasks: tasksRef.current, 
-             language: lang,
-             history: history 
-          }) 
+  const toggleOptionsMenu = () => {
+    if (isOptionsMenuOpen) {
+      setIsOptionsMenuOpen(false);
+    } else {
+      if (optionsMenuRef.current) {
+        const rect = optionsMenuRef.current.getBoundingClientRect();
+        setMenuPosition({
+          top: rect.bottom + 8, 
+          right: window.innerWidth - rect.right
         });
       }
-
-      const data: ApiResponse = await response.json();
-      
-      if (isAudio && data.transcription) {
-          setMessages(prev => prev.map(msg => msg.id === msgId ? { ...msg, transcription: data.transcription } : msg));
-      }
-
-      if (data.tasks) {
-        setMessages(prev => [...prev, { id: Date.now().toString() + 'bot', type: 'bot', content: data.summary || dict.updated }]);
-        if (user) await syncFirestoreFromAI(data.tasks);
-        else saveLocal(data.tasks);
-      } else {
-        setMessages(prev => [...prev, { id: Date.now().toString() + 'err', type: 'bot', content: dict.error }]);
-      }
-    } catch (error) {
-      showToast("Connection error");
-    } finally {
-      setIsLoading(false);
+      setIsOptionsMenuOpen(true);
     }
   };
 
-  // --- RENDER HELPERS ---
-  
-  const groupedTasks = tasks.reduce((acc, task) => {
-    const cat = task.category || dict.uncategorized;
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(task);
-    return acc;
-  }, {} as Record<string, Task[]>);
-
-  const formatDate = (dateStr?: string | null) => {
-    if (!dateStr) return null;
-    
-    if (dateStr.length === 10) {
-         const [y, m, d] = dateStr.split('-').map(Number);
-         const dateObj = new Date(y, m - 1, d);
-         return dateObj.toLocaleDateString(lang, { month: 'short', day: 'numeric' });
-    }
-
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
-
+  // --- RENDER ---
   return (
     <div className="fixed inset-0 flex justify-center items-center bg-[#1a1a1a] overflow-hidden font-sans">
       <div className="w-full h-full md:h-[90vh] md:rounded-2xl overflow-hidden max-w-md bg-gray-50 flex flex-col shadow-2xl relative">
@@ -782,83 +345,34 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
           </div>
         )}
 
-        {/* --- MAIN CONTENT AREA (Fills space between Header and Input) --- */}
+        {/* --- MAIN CONTENT AREA --- */}
         <div className="flex-1 relative overflow-hidden bg-gray-50">
           
-          {/* CHAT VIEW */}
-          <div 
-            className={`absolute inset-0 flex flex-col transition-all duration-300 ${showTaskMenu ? 'opacity-0 pointer-events-none scale-95' : 'opacity-100 scale-100'}`}
-          >
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth pb-4">
-              {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} dict={dict} />)}
-              {isLoading && (
-                <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
-                </div>
-              )}
-            </div>
-          </div>
+          <ChatArea 
+            messages={messages} 
+            isLoading={isLoading} 
+            dict={dict} 
+            isHidden={showTaskMenu}
+          />
 
-          {/* TASK MENU VIEW (Separate Layer) */}
-          <div 
-            className={`absolute inset-0 z-20 bg-gray-50 flex flex-col transition-transform duration-300 ${showTaskMenu ? 'translate-x-0' : 'translate-x-full'}`}
-          >
-            <div className="p-4 bg-white border-b flex justify-between items-center shadow-sm shrink-0">
-               <h2 className="font-bold text-gray-700">{user ? dict.listTitleCloud : dict.listTitleLocal}</h2>
-               <button onClick={() => setShowTaskMenu(false)} className="text-blue-600 text-sm font-semibold cursor-pointer">{dict.backToChat}</button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {!isDataLoaded ? <TaskListSkeleton /> : tasks.length === 0 ? (
-                 <div className="text-center text-gray-400 mt-10 text-sm">{dict.noTasks}</div>
-              ) : (
-                 Object.entries(groupedTasks).map(([category, items]) => (
-                    <div key={category} className="space-y-2">
-                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-2">{category}</h3>
-                       <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-                          {items.map(task => (
-                             <div key={task.id} className="p-3 pl-4 flex items-start gap-3 hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => toggleTask(task.id)}>
-                                <button 
-                                  className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer ${task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}
-                                >
-                                  {task.status === 'completed' && <svg className="w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
-                                </button>
-                                
-                                <div className="flex-1 min-w-0">
-                                  <div className={`text-sm break-words ${task.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                                    {task.title}
-                                  </div>
-                                  {task.date && (
-                                     <div className="text-[10px] text-blue-500 font-medium mt-0.5 flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                        {formatDate(task.date)}
-                                     </div>
-                                  )}
-                                </div>
-
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} 
-                                  className="text-gray-300 hover:text-red-500 p-2 -mt-1.5 cursor-pointer"
-                                >
-                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                             </div>
-                          ))}
-                       </div>
-                    </div>
-                 ))
-              )}
-            </div>
-          </div>
+          <TaskSidebar 
+            isOpen={showTaskMenu}
+            onClose={() => setShowTaskMenu(false)}
+            tasks={tasks}
+            isDataLoaded={isDataLoaded}
+            onToggleTask={toggleTask}
+            onDeleteTask={deleteTask}
+            dict={dict}
+            user={user}
+            lang={lang}
+          />
         </div>
 
         {/* INPUT BAR */}
         <div className="bg-white border-t border-gray-200 shrink-0 safe-area-bottom z-30">
           <div className="p-3 flex gap-2 items-center">
             
-            {/* TASKS TOGGLE BUTTON (BOTTOM LEFT) */}
+            {/* TASKS TOGGLE BUTTON */}
             <button
                onClick={() => setShowTaskMenu(!showTaskMenu)}
                className={`p-3 rounded-full transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${showTaskMenu ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
@@ -871,15 +385,15 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
             {/* MIC BUTTON */}
             <button
-              onMouseDown={handleButtonStart}
-              onMouseUp={handleButtonStop}
-              onTouchStart={handleButtonStart}
-              onTouchEnd={handleButtonStop}
+              onMouseDown={(e) => { e.preventDefault(); if(!(isRecording && isWakeWordTriggered)) startRecordingLogic(false); }}
+              onMouseUp={(e) => { e.preventDefault(); stopRecordingLogic(); }}
+              onTouchStart={(e) => { e.preventDefault(); if(!(isRecording && isWakeWordTriggered)) startRecordingLogic(false); }}
+              onTouchEnd={(e) => { e.preventDefault(); stopRecordingLogic(); }}
               className={`p-3 rounded-full transition-all duration-300 flex items-center justify-center shadow-sm select-none touch-none cursor-pointer ${
                 isRecording 
                   ? isWakeWordTriggered 
-                     ? 'bg-indigo-500 text-white scale-110 ring-4 ring-indigo-200' // Wake Word Color
-                     : 'bg-red-500 text-white scale-110 ring-4 ring-red-100'       // Normal Hold Color
+                     ? 'bg-indigo-500 text-white scale-110 ring-4 ring-indigo-200' 
+                     : 'bg-red-500 text-white scale-110 ring-4 ring-red-100'       
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'
               }`}
             >
