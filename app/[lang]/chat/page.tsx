@@ -478,7 +478,10 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
+
+      setTimeout(() => {
+        chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
+      }, 250);
     }
   }, [messages, isLoading]);
 
