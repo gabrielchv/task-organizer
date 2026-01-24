@@ -16,7 +16,6 @@ import {
   writeBatch 
 } from "firebase/firestore";
 
-// --- TENSORFLOW IMPORTS ---
 import * as tf from "@tensorflow/tfjs";
 import * as speechCommands from "@tensorflow-models/speech-commands";
 import "@tensorflow/tfjs-backend-webgl";
@@ -114,31 +113,24 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const [inputVal, setInputVal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   
-  // Use Refs to access latest state inside async callbacks (Wake Word / VAD)
   const tasksRef = useRef(tasks);
   const messagesRef = useRef(messages);
 
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   
-  // Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [isWakeWordTriggered, setIsWakeWordTriggered] = useState(false);
-  
   const [toast, setToast] = useState<string | null>(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // Wake Word State
   const [model, setModel] = useState<speechCommands.SpeechCommandRecognizer | null>(null);
   const [isModelLoading, setIsModelLoading] = useState(true);
   const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(false); 
 
-  // UI State
-  const [showTaskMenu, setShowTaskMenu] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
+  const [showTaskMenuMobile, setShowTaskMenuMobile] = useState(false);
   const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
-  
-  // Feature flags
+  const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
   const [canShare, setCanShare] = useState(false);
 
   // Refs
@@ -147,16 +139,13 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(0);
   const isPressingRef = useRef(false); 
+  const vadCleanupRef = useRef<(() => void) | null>(null);
   const optionsMenuRef = useRef<HTMLButtonElement>(null);
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
-  const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Ref for VAD (Voice Activity Detection) cleanup
-  const vadCleanupRef = useRef<(() => void) | null>(null);
 
-  // --- WAKE WORD SETUP ---
   const WAKE_WORD = "organizer"; 
 
+  // --- WAKE WORD SETUP ---
   useEffect(() => {
     loadModel();
   }, []);
@@ -180,84 +169,46 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     }
   };
 
-  // Toggle Listening: Robust Async Handling
   useEffect(() => {
     if (!model || isModelLoading) return;
-
     let isCancelled = false;
-
     const manageListening = async () => {
       try {
-        // Force stop ANY existing listeners first to prevent conflicts
-        if (model.isListening()) {
-            await model.stopListening().catch(() => {});
-        }
-
+        if (model.isListening()) await model.stopListening().catch(() => {});
         if (isCancelled) return;
-
-        // Only start if enabled AND not currently recording
         if (isWakeWordEnabled && !isRecording) {
             await model.listen(async (result) => {
                 if (isCancelled) return;
-                
                 const scores = result.scores as Float32Array;
                 const maxScore = Math.max(...scores);
                 const maxScoreIndex = scores.indexOf(maxScore);
                 const detectedWord = model.wordLabels()[maxScoreIndex];
-                
-                // Strict threshold check
-                if (detectedWord === WAKE_WORD && maxScore > 0.90) {
-                   triggerWakeWordRecording();
-                }
-            }, {
-                includeSpectrogram: false,
-                probabilityThreshold: 0.85, 
-                invokeCallbackOnNoiseAndUnknown: true,
-                overlapFactor: 0.5 
-            });
+                if (detectedWord === WAKE_WORD && maxScore > 0.90) triggerWakeWordRecording();
+            }, { includeSpectrogram: false, probabilityThreshold: 0.85, invokeCallbackOnNoiseAndUnknown: true, overlapFactor: 0.5 });
         }
-      } catch (err) {
-        console.error("Wake Word Logic Error:", err);
-      }
+      } catch (err) { console.error(err); }
     };
-
     manageListening();
-
     return () => {
         isCancelled = true;
         if (model) model.stopListening().catch(() => {});
     };
   }, [model, isRecording, isModelLoading, isWakeWordEnabled]);
 
-
   const triggerWakeWordRecording = async () => {
-    // Visual feedback
     setIsWakeWordTriggered(true);
-    // Start Recording with VAD enabled (pass true)
     await startRecordingLogic(true);
   };
 
-  // --- INITIALIZATION ---
+  // --- INITIALIZATION & CLICK HANDLING ---
   useEffect(() => {
-    setMessages(prev => {
-        if (prev.length === 0) return [{ id: 'init', type: 'bot', content: dict.greeting }];
-        return prev;
-    });
+    setMessages(prev => prev.length === 0 ? [{ id: 'init', type: 'bot', content: dict.greeting }] : prev);
+    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
   }, [dict.greeting]);
 
   useEffect(() => {
-    setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
-  }, []);
-
-  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isOptionsMenuOpen &&
-        optionsMenuRef.current && 
-        !optionsMenuRef.current.contains(event.target as Node) &&
-        optionsDropdownRef.current &&
-        !optionsDropdownRef.current.contains(event.target as Node)
-      ) {
+      if (isOptionsMenuOpen && optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node) && optionsDropdownRef.current && !optionsDropdownRef.current.contains(event.target as Node)) {
         setIsOptionsMenuOpen(false);
       }
     };
@@ -268,45 +219,35 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const toggleOptionsMenu = () => {
     if (isOptionsMenuOpen) {
       setIsOptionsMenuOpen(false);
-    } else {
-      if (optionsMenuRef.current) {
-        const rect = optionsMenuRef.current.getBoundingClientRect();
-        setMenuPosition({
-          top: rect.bottom + 8, 
-          right: window.innerWidth - rect.right
-        });
-      }
+    } else if (optionsMenuRef.current) {
+      const rect = optionsMenuRef.current.getBoundingClientRect();
+      setMenuPosition({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
       setIsOptionsMenuOpen(true);
     }
   };
 
   // --- MIGRATION & SYNC ---
-  const migrateGuestTasks = async (userId: string) => {
-    const savedGuest = localStorage.getItem("guest_tasks");
-    if (!savedGuest) return;
-    try {
-      const localTasks: Task[] = JSON.parse(savedGuest);
-      if (localTasks.length === 0) return;
-      const batch = writeBatch(db);
-      const userTasksRef = collection(db, "users", userId, "tasks");
-      localTasks.forEach(task => {
-        const docRef = doc(userTasksRef, task.id); 
-        batch.set(docRef, task, { merge: true });
-      });
-      await batch.commit();
-      localStorage.removeItem("guest_tasks");
-      showToast(dict.localSynced);
-    } catch (e) { console.error(e); }
-  };
-
   useEffect(() => {
     if (authLoading) return;
     if (user) {
+      const migrateGuestTasks = async (userId: string) => {
+        const savedGuest = localStorage.getItem("guest_tasks");
+        if (!savedGuest) return;
+        try {
+          const localTasks: Task[] = JSON.parse(savedGuest);
+          if (localTasks.length === 0) return;
+          const batch = writeBatch(db);
+          const userTasksRef = collection(db, "users", userId, "tasks");
+          localTasks.forEach(task => batch.set(doc(userTasksRef, task.id), task, { merge: true }));
+          await batch.commit();
+          localStorage.removeItem("guest_tasks");
+          showToast(dict.localSynced);
+        } catch (e) { console.error(e); }
+      };
       migrateGuestTasks(user.uid);
       const q = query(collection(db, "users", user.uid, "tasks"));
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        const dbTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[];
-        setTasks(dbTasks);
+        setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[]);
         setIsDataLoaded(true);
       });
       return () => unsubscribe();
@@ -315,7 +256,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       if (saved) setTasks(JSON.parse(saved));
       setIsDataLoaded(true);
     }
-  }, [user, authLoading]); 
+  }, [user, authLoading, dict.localSynced]); 
 
   const saveLocal = (newTasks: Task[]) => {
     setTasks(newTasks);
@@ -328,26 +269,17 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       const batch = writeBatch(db);
       const userTasksRef = collection(db, "users", user.uid, "tasks");
       const newIds = new Set(newTasksState.map(t => t.id));
-      tasks.forEach(currentTask => {
-        if (!newIds.has(currentTask.id)) batch.delete(doc(userTasksRef, currentTask.id));
-      });
-      newTasksState.forEach(newTask => {
-        batch.set(doc(userTasksRef, newTask.id), newTask, { merge: true });
-      });
+      tasks.forEach(currentTask => { if (!newIds.has(currentTask.id)) batch.delete(doc(userTasksRef, currentTask.id)); });
+      newTasksState.forEach(newTask => batch.set(doc(userTasksRef, newTask.id), newTask, { merge: true }));
       await batch.commit();
     } catch (e) { console.error(e); }
   };
 
   // --- EXPORT & ACTIONS ---
-  const getFormattedList = () => {
-    return tasks.map(t => 
-      `[${t.status === 'completed' ? 'x' : ' '}] ${t.title} (${t.date ? t.date : ''})`
-    ).join('\n');
-  };
-
   const handleCopyList = async () => {
     try {
-      await navigator.clipboard.writeText(getFormattedList());
+      const list = tasks.map(t => `[${t.status === 'completed' ? 'x' : ' '}] ${t.title} (${t.date ? t.date : ''})`).join('\n');
+      await navigator.clipboard.writeText(list);
       showToast(dict.listCopied);
     } catch (err) { showToast(dict.error); }
     setIsOptionsMenuOpen(false);
@@ -355,36 +287,22 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
   const handleShareList = async () => {
     if (typeof navigator !== 'undefined' && 'share' in navigator) {
-      try {
-        await (navigator as any).share({ title: dict.title, text: getFormattedList() });
-      } catch (err) {}
+      try { await (navigator as any).share({ title: dict.title, text: tasks.map(t => `[${t.status === 'completed' ? 'x' : ' '}] ${t.title}`).join('\n') }); } catch (err) {}
     }
     setIsOptionsMenuOpen(false);
   };
 
   const exportToGoogleTasks = async () => {
     setIsOptionsMenuOpen(false);
-    if (!user) return;
-    if (!googleAccessToken) {
-      showToast(dict.signIn + " again"); 
-      await signInWithGoogle(); 
-      return;
-    }
+    if (!user || !googleAccessToken) { showToast(dict.signIn + " again"); await signInWithGoogle(); return; }
     const pendingTasks = tasks.filter(t => t.status === 'pending');
     if (pendingTasks.length === 0) { showToast("No pending tasks"); return; }
     showToast(`Exporting to Tasks...`);
-    
     try {
       let count = 0;
       for (const task of pendingTasks) {
         const payload: any = { title: task.title };
-        if (task.date) {
-            if (task.date.length === 10) {
-               payload.due = task.date + 'T00:00:00.000Z'; 
-            } else {
-               payload.due = new Date(task.date).toISOString();
-            }
-        }
+        if (task.date) payload.due = task.date.length === 10 ? task.date + 'T00:00:00.000Z' : new Date(task.date).toISOString();
         const response = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
@@ -398,43 +316,27 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
   const exportToCalendar = async () => {
     setIsOptionsMenuOpen(false);
-    if (!user) return;
-    if (!googleAccessToken) {
-      showToast(dict.signIn + " again"); 
-      await signInWithGoogle(); 
-      return;
-    }
-    
+    if (!user || !googleAccessToken) { showToast(dict.signIn + " again"); await signInWithGoogle(); return; }
     const datedTasks = tasks.filter(t => t.status === 'pending' && t.date);
     if (datedTasks.length === 0) { showToast("No dated tasks to export"); return; }
     showToast(`Exporting to Calendar...`);
-
     try {
       let count = 0;
       for (const task of datedTasks) {
-         let start: any = {};
-         let end: any = {};
-
+         let start: any = {}, end: any = {};
          if (task.date && task.date.length === 10) {
              start = { date: task.date };
-             const nextDay = new Date(task.date);
-             nextDay.setDate(nextDay.getDate() + 1);
+             const nextDay = new Date(task.date); nextDay.setDate(nextDay.getDate() + 1);
              end = { date: nextDay.toISOString().split('T')[0] };
          } else if (task.date) {
              const startDate = new Date(task.date);
-             const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); 
              start = { dateTime: startDate.toISOString() };
-             end = { dateTime: endDate.toISOString() };
+             end = { dateTime: new Date(startDate.getTime() + 3600000).toISOString() };
          }
-
          const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${googleAccessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                summary: task.title,
-                start,
-                end
-            })
+            body: JSON.stringify({ summary: task.title, start, end })
          });
          if (response.ok) count++;
       }
@@ -445,164 +347,69 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const toggleTask = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
-    const newStatus: Task['status'] = task.status === 'completed' ? 'pending' : 'completed';
-    
-    const newTasks = tasks.map(t => 
-        t.id === taskId ? { ...t, status: newStatus } : t
-    ) as Task[];
-    
+    const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+    const newTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t) as Task[];
     setTasks(newTasks);
-
-    if (user) {
-      await setDoc(doc(db, "users", user.uid, "tasks", taskId), { status: newStatus }, { merge: true });
-    } else {
-      saveLocal(newTasks);
-    }
+    if (user) await setDoc(doc(db, "users", user.uid, "tasks", taskId), { status: newStatus }, { merge: true });
+    else saveLocal(newTasks);
   };
 
   const deleteTask = async (taskId: string) => {
     const newTasks = tasks.filter(t => t.id !== taskId);
     setTasks(newTasks);
-    if (user) {
-      await deleteDoc(doc(db, "users", user.uid, "tasks", taskId));
-    } else {
-      saveLocal(newTasks);
-    }
+    if (user) await deleteDoc(doc(db, "users", user.uid, "tasks", taskId));
+    else saveLocal(newTasks);
   };
 
-  // --- RECORDING LOGIC (Refactored) ---
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
+  // --- RECORDING LOGIC ---
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-  useEffect(() => {
-    if (chatContainerRef.current) {
-
-      setTimeout(() => {
-        chatContainerRef.current?.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
-      }, 250);
-    }
-  }, [messages, isLoading]);
-
-  // VAD HELPER FUNCTION
   const setupVAD = (stream: MediaStream) => {
     try {
         const audioContext = new AudioContext();
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
-        source.connect(analyser);
-
+        analyser.fftSize = 512; source.connect(analyser);
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        let silenceStart = Date.now();
-        let hasSpoken = false; 
-        let animationFrameId: number;
-
+        let silenceStart = Date.now(), hasSpoken = false, animationFrameId: number;
         const checkAudio = () => {
             analyser.getByteFrequencyData(dataArray);
-            
-            // Calculate average volume
             const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            const THRESHOLD = 30; 
-            
-            if (volume > THRESHOLD) {
-                silenceStart = Date.now();
-                hasSpoken = true;
-            }
-            
+            if (volume > 30) { silenceStart = Date.now(); hasSpoken = true; }
             const timeSinceSilence = Date.now() - silenceStart;
-
-            if (hasSpoken && timeSinceSilence > 1500) {
-                stopRecordingLogic();
-                return;
-            }
-            
-            if (!hasSpoken && timeSinceSilence > 4000) {
-                stopRecordingLogic();
-                return;
-            }
-
+            if ((hasSpoken && timeSinceSilence > 1500) || (!hasSpoken && timeSinceSilence > 4000)) { stopRecordingLogic(); return; }
             animationFrameId = requestAnimationFrame(checkAudio);
         };
-        
         checkAudio();
-
-        return () => {
-            cancelAnimationFrame(animationFrameId);
-            audioContext.close().catch(console.error);
-        };
-    } catch (e) {
-        console.error("VAD Setup Error:", e);
-        return () => {};
-    }
+        return () => { cancelAnimationFrame(animationFrameId); audioContext.close().catch(console.error); };
+    } catch (e) { return () => {}; }
   };
 
-  // Logic to START recording
   const startRecordingLogic = async (useVAD = false) => {
-    isPressingRef.current = true;
-    startTimeRef.current = Date.now();
-
+    isPressingRef.current = true; startTimeRef.current = Date.now();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      if (!isPressingRef.current) {
-        stream.getTracks().forEach(track => track.stop());
-        return;
-      }
-
+      if (!isPressingRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
       const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      mediaRecorderRef.current = mediaRecorder; audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
-        const duration = Date.now() - startTimeRef.current;
-        
-        if (duration < 500) {
-          showToast(dict.holdToRecord);
-        } else {
-          handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
-        }
-        
-        setIsRecording(false);
-        setIsWakeWordTriggered(false); 
+        if (Date.now() - startTimeRef.current < 500) showToast(dict.holdToRecord);
+        else handleSend(new Blob(audioChunksRef.current, { type: 'audio/webm' }), true);
+        setIsRecording(false); setIsWakeWordTriggered(false); 
       };
-      
-      mediaRecorder.start();
-      setIsRecording(true);
-
-      if (useVAD) {
-          if (vadCleanupRef.current) vadCleanupRef.current(); 
-          vadCleanupRef.current = setupVAD(stream) || null;
-      }
-
-    } catch (err) { 
-      console.error(err);
-      showToast("Microphone denied"); 
-      setIsRecording(false);
-      isPressingRef.current = false;
-      setIsWakeWordTriggered(false);
-    }
+      mediaRecorder.start(); setIsRecording(true);
+      if (useVAD) { if (vadCleanupRef.current) vadCleanupRef.current(); vadCleanupRef.current = setupVAD(stream) || null; }
+    } catch (err) { showToast("Microphone denied"); setIsRecording(false); isPressingRef.current = false; setIsWakeWordTriggered(false); }
   };
 
-  // Logic to STOP recording
   const stopRecordingLogic = () => {
     isPressingRef.current = false;
-    if (wakeWordTimeoutRef.current) clearTimeout(wakeWordTimeoutRef.current);
-    
-    if (vadCleanupRef.current) {
-        vadCleanupRef.current();
-        vadCleanupRef.current = null;
-    }
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
+    if (vadCleanupRef.current) { vadCleanupRef.current(); vadCleanupRef.current = null; }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") mediaRecorderRef.current.stop();
   };
 
-  // Button Handlers
   const handleButtonStart = (e: React.MouseEvent | React.TouchEvent) => {
       e.preventDefault();
       if (isRecording && isWakeWordTriggered) return;
@@ -614,170 +421,56 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
       stopRecordingLogic();
   };
 
-  // --- SENDING ---
   const handleSend = async (content: string | Blob, isAudio: boolean) => {
     if (!isAudio && !(content as string).trim()) return;
     const msgId = Date.now().toString();
-    
-    setMessages(prev => [...prev, { 
-      id: msgId,
-      type: 'user', 
-      content: isAudio ? dict.voiceMessage : (content as string),
-      audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined
-    }]);
-
-    // Use Refs for history to ensure latest messages are used
-    const history = messagesRef.current.slice(-6).map(m => ({
-        role: m.type === 'user' ? 'User' : 'AI',
-        content: m.transcription || m.content || "" 
-    }));
-
+    setMessages(prev => [...prev, { id: msgId, type: 'user', content: isAudio ? dict.voiceMessage : (content as string), audioUrl: isAudio && content instanceof Blob ? URL.createObjectURL(content) : undefined }]);
+    const history = messagesRef.current.slice(-6).map(m => ({ role: m.type === 'user' ? 'User' : 'AI', content: m.transcription || m.content || "" }));
     if (!isAudio) setInputVal("");
     setIsLoading(true);
-
     try {
       let response;
       if (isAudio) {
-        const formData = new FormData();
-        formData.append('audio', content as Blob);
-        // Use tasksRef.current to avoid stale state in callback
-        formData.append('currentTasks', JSON.stringify(tasksRef.current));
-        formData.append('language', lang); 
-        formData.append('history', JSON.stringify(history));
-
+        const formData = new FormData(); formData.append('audio', content as Blob); formData.append('currentTasks', JSON.stringify(tasksRef.current)); formData.append('language', lang); formData.append('history', JSON.stringify(history));
         response = await fetch('/api/process', { method: 'POST', body: formData });
       } else {
-        response = await fetch('/api/process', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-             text: content, 
-             // Use tasksRef.current
-             currentTasks: tasksRef.current, 
-             language: lang,
-             history: history 
-          }) 
-        });
+        response = await fetch('/api/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: content, currentTasks: tasksRef.current, language: lang, history: history }) });
       }
-
       const data: ApiResponse = await response.json();
-      
-      if (isAudio && data.transcription) {
-          setMessages(prev => prev.map(msg => msg.id === msgId ? { ...msg, transcription: data.transcription } : msg));
-      }
-
+      if (isAudio && data.transcription) setMessages(prev => prev.map(msg => msg.id === msgId ? { ...msg, transcription: data.transcription } : msg));
       if (data.tasks) {
         setMessages(prev => [...prev, { id: Date.now().toString() + 'bot', type: 'bot', content: data.summary || dict.updated }]);
-        if (user) await syncFirestoreFromAI(data.tasks);
-        else saveLocal(data.tasks);
-      } else {
-        setMessages(prev => [...prev, { id: Date.now().toString() + 'err', type: 'bot', content: dict.error }]);
-      }
-    } catch (error) {
-      showToast("Connection error");
-    } finally {
-      setIsLoading(false);
-    }
+        if (user) await syncFirestoreFromAI(data.tasks); else saveLocal(data.tasks);
+      } else { setMessages(prev => [...prev, { id: Date.now().toString() + 'err', type: 'bot', content: dict.error }]); }
+    } catch (error) { showToast("Connection error"); } finally { setIsLoading(false); }
   };
 
-  // --- RENDER HELPERS ---
-  
+  // --- RENDERING HELPERS ---
   const groupedTasks = tasks.reduce((acc, task) => {
     const cat = task.category || dict.uncategorized;
     if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(task);
-    return acc;
+    acc[cat].push(task); return acc;
   }, {} as Record<string, Task[]>);
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return null;
-    
     if (dateStr.length === 10) {
          const [y, m, d] = dateStr.split('-').map(Number);
-         const dateObj = new Date(y, m - 1, d);
-         return dateObj.toLocaleDateString(lang, { month: 'short', day: 'numeric' });
+         return new Date(y, m - 1, d).toLocaleDateString(lang, { month: 'short', day: 'numeric' });
     }
-
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return new Date(dateStr).toLocaleDateString(lang, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
+
+  const DesktopActionBtn = ({ onClick, icon, label, color = "text-gray-700" }: any) => (
+    <button onClick={onClick} className={`w-full text-left px-3 py-2 text-sm ${color} hover:bg-gray-100 rounded-lg flex items-center gap-2 transition-colors cursor-pointer`}>
+      {icon} {label}
+    </button>
+  );
 
   return (
     <div className="fixed inset-0 flex justify-center items-center bg-[#1a1a1a] overflow-hidden font-sans">
-      <div className="w-full h-full md:h-[90vh] md:rounded-2xl overflow-hidden max-w-md bg-gray-50 flex flex-col shadow-2xl relative">
+      <div className="w-full h-full md:h-[95vh] md:w-[95vw] md:rounded-2xl overflow-hidden md:max-w-5xl bg-gray-50 flex flex-col md:flex-row shadow-2xl relative">
         
-        {/* HEADER */}
-        <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-30 shadow-sm min-h-[60px]">
-          <h1 className="font-bold text-gray-800 text-lg tracking-tight">{dict.title}</h1>
-          <div className="flex items-center gap-2">
-            <button 
-              ref={optionsMenuRef}
-              onClick={toggleOptionsMenu}
-              className="p-2 rounded-full hover:bg-gray-100 text-gray-500 cursor-pointer"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </button>
-            <AuthButton label={user ? dict.signOut : dict.signIn} />
-          </div>
-        </header>
-
-        {/* OPTIONS MENU PORTAL */}
-        {isOptionsMenuOpen && menuPosition && createPortal(
-          <div 
-            ref={optionsDropdownRef}
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95"
-            style={{ top: menuPosition.top, right: menuPosition.right }}
-          >
-             <button
-               disabled={isModelLoading}
-               onClick={() => {
-                 setIsWakeWordEnabled(!isWakeWordEnabled);
-                 setIsOptionsMenuOpen(false);
-                 showToast(isWakeWordEnabled ? `${dict.wakeWord} ${dict.off}` : `${dict.wakeWord} ${dict.on}`);
-               }}
-               className={`w-full text-left px-4 py-3 text-sm flex items-center gap-2 cursor-pointer border-b transition-colors ${
-                 isModelLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
-               }`}
-             >
-                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-                <div className="flex-1 text-gray-700">{dict.wakeWord}</div>
-                <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    isWakeWordEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'
-                }`}>
-                    {isWakeWordEnabled ? dict.on : dict.off}
-                </div>
-             </button>
-
-             {canShare && (
-                <button onClick={handleShareList} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                  {dict.share}
-                </button>
-             )}
-             <button onClick={handleCopyList} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
-                {dict.copy}
-             </button>
-             {user && (
-                <>
-                  <button onClick={exportToGoogleTasks} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 border-t flex items-center gap-2 cursor-pointer">
-                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                     {dict.export}
-                  </button>
-                  <button onClick={exportToCalendar} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer">
-                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                     {dict.exportCalendar}
-                  </button>
-                </>
-             )}
-          </div>,
-          document.body
-        )}
-
         {/* TOAST */}
         {toast && (
           <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-md z-50 animate-bounce whitespace-nowrap">
@@ -785,138 +478,118 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
           </div>
         )}
 
-        {/* --- MAIN CONTENT AREA (Fills space between Header and Input) --- */}
-        <div className="flex-1 relative overflow-hidden bg-gray-50">
-          
-          {/* CHAT VIEW */}
-          <div 
-            className={`absolute inset-0 flex flex-col transition-all duration-300 ${showTaskMenu ? 'opacity-0 pointer-events-none scale-95' : 'opacity-100 scale-100'}`}
-          >
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth pb-4">
-              {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} dict={dict} />)}
-              {isLoading && (
-                <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
-                </div>
-              )}
+        {/* LEFT: CHAT AREA */}
+        <div className={`flex-1 flex flex-col min-w-0 bg-white border-r border-gray-100 transition-all duration-300 ${showTaskMenuMobile ? 'hidden md:flex' : 'flex'}`}>
+          <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-30 shadow-sm min-h-15 md:h-18">
+            <h1 className="font-bold text-gray-800 text-lg tracking-tight">{dict.title}</h1>
+            <div className="flex items-center gap-2">
+              {/* OPTIONS BURGER (Mobile Only) */}
+              <button ref={optionsMenuRef} onClick={toggleOptionsMenu} className="md:hidden p-2 rounded-full hover:bg-gray-100 text-gray-500 cursor-pointer">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+              </button>
+              <AuthButton label={user ? dict.signOut : dict.signIn} />
             </div>
+          </header>
+
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth pb-4 bg-gray-50/50">
+            {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} dict={dict} />)}
+            {isLoading && (
+              <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
+                {[0, 75, 150].map(d => <div key={d} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: `${d}ms`}}></div>)}
+              </div>
+            )}
           </div>
 
-          {/* TASK MENU VIEW (Separate Layer) */}
-          <div 
-            className={`absolute inset-0 z-20 bg-gray-50 flex flex-col transition-transform duration-300 ${showTaskMenu ? 'translate-x-0' : 'translate-x-full'}`}
-          >
-            <div className="p-4 bg-white border-b flex justify-between items-center shadow-sm shrink-0">
-               <h2 className="font-bold text-gray-700">{user ? dict.listTitleCloud : dict.listTitleLocal}</h2>
-               <button onClick={() => setShowTaskMenu(false)} className="text-blue-600 text-sm font-semibold cursor-pointer">{dict.backToChat}</button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {!isDataLoaded ? <TaskListSkeleton /> : tasks.length === 0 ? (
-                 <div className="text-center text-gray-400 mt-10 text-sm">{dict.noTasks}</div>
-              ) : (
-                 Object.entries(groupedTasks).map(([category, items]) => (
-                    <div key={category} className="space-y-2">
-                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-2">{category}</h3>
-                       <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-                          {items.map(task => (
-                             <div key={task.id} className="p-3 pl-4 flex items-start gap-3 hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => toggleTask(task.id)}>
-                                <button 
-                                  className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer ${task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}
-                                >
-                                  {task.status === 'completed' && <svg className="w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
-                                </button>
-                                
-                                <div className="flex-1 min-w-0">
-                                  <div className={`text-sm break-words ${task.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                                    {task.title}
-                                  </div>
-                                  {task.date && (
-                                     <div className="text-[10px] text-blue-500 font-medium mt-0.5 flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                        {formatDate(task.date)}
-                                     </div>
-                                  )}
-                                </div>
-
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} 
-                                  className="text-gray-300 hover:text-red-500 p-2 -mt-1.5 cursor-pointer"
-                                >
-                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                             </div>
-                          ))}
-                       </div>
-                    </div>
-                 ))
-              )}
+          <div className="bg-white border-t border-gray-200 shrink-0 safe-area-bottom z-30">
+            <div className="p-3 flex gap-2 items-center max-w-3xl mx-auto w-full">
+              <button onClick={() => setShowTaskMenuMobile(true)} className="md:hidden p-3 rounded-full bg-gray-100 text-gray-500 cursor-pointer">
+                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              </button>
+              <button onMouseDown={handleButtonStart} onMouseUp={handleButtonStop} onTouchStart={handleButtonStart} onTouchEnd={handleButtonStop} className={`p-3 rounded-full transition-all duration-300 flex items-center justify-center shadow-sm select-none touch-none cursor-pointer ${isRecording ? (isWakeWordTriggered ? 'bg-indigo-500 text-white scale-110 ring-4 ring-indigo-200' : 'bg-red-500 text-white scale-110 ring-4 ring-red-100') : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'}`}>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+              </button>
+              <input type="text" value={inputVal} onChange={(e) => setInputVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend(inputVal, false)} className="w-full bg-gray-50 border border-transparent rounded-full px-4 py-3 md:text-sm text-gray-800 focus:outline-none focus:bg-white focus:border-blue-100 focus:ring-2 focus:ring-blue-50 transition-all text-base" placeholder={dict.placeholder} disabled={isLoading || isRecording} />
+              <button onClick={() => handleSend(inputVal, false)} disabled={isLoading || !inputVal.trim()} className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95 cursor-pointer">
+                <svg className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* INPUT BAR */}
-        <div className="bg-white border-t border-gray-200 shrink-0 safe-area-bottom z-30">
-          <div className="p-3 flex gap-2 items-center">
-            
-            {/* TASKS TOGGLE BUTTON (BOTTOM LEFT) */}
-            <button
-               onClick={() => setShowTaskMenu(!showTaskMenu)}
-               className={`p-3 rounded-full transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${showTaskMenu ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-               title={dict.tasksMenu}
-            >
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-               </svg>
-            </button>
-
-            {/* MIC BUTTON */}
-            <button
-              onMouseDown={handleButtonStart}
-              onMouseUp={handleButtonStop}
-              onTouchStart={handleButtonStart}
-              onTouchEnd={handleButtonStop}
-              className={`p-3 rounded-full transition-all duration-300 flex items-center justify-center shadow-sm select-none touch-none cursor-pointer ${
-                isRecording 
-                  ? isWakeWordTriggered 
-                     ? 'bg-indigo-500 text-white scale-110 ring-4 ring-indigo-200' // Wake Word Color
-                     : 'bg-red-500 text-white scale-110 ring-4 ring-red-100'       // Normal Hold Color
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            </button>
-
-            <input
-              type="text"
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend(inputVal, false)}
-              className="w-full bg-gray-50 border border-transparent rounded-full px-4 py-3 text-base md:text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-blue-100 focus:ring-2 focus:ring-blue-50 transition-all"
-              placeholder={dict.placeholder}
-              disabled={isLoading || isRecording}
-            />
-            
-            <button
-              onClick={() => handleSend(inputVal, false)}
-              disabled={isLoading || !inputVal.trim()}
-              className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md active:scale-95 cursor-pointer"
-            >
-              <svg className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-              </svg>
-            </button>
+        {/* RIGHT: TASK SIDEBAR (Split View on Desktop) */}
+        <div className={`w-full md:w-80 lg:w-96 bg-gray-50 flex flex-col shrink-0 transition-transform duration-300 ${showTaskMenuMobile ? 'translate-x-0' : 'translate-x-full md:translate-x-0'} absolute md:relative inset-0 md:inset-auto z-40 md:z-10`}>
+          <div className="p-4 bg-white border-b flex justify-between items-center shadow-sm shrink-0 h-15 md:h-18">
+             <h2 className="font-bold text-gray-700">{user ? dict.listTitleCloud : dict.listTitleLocal}</h2>
+             <button onClick={() => setShowTaskMenuMobile(false)} className="md:hidden text-blue-600 text-sm font-semibold cursor-pointer">{dict.backToChat}</button>
           </div>
-          <div className="pb-2 text-center">
-             <a href="https://www.linkedin.com/in/gabriel-chv" target="_blank" rel="noreferrer" className="text-[10px] text-gray-400 uppercase tracking-widest font-bold hover:text-blue-500 transition-colors cursor-pointer">
-                 Gabriel Chaves | LinkedIn
-             </a>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            {/* DESKTOP TOOLS (Always Expanded) */}
+            <div className="hidden md:block space-y-2 mb-6">
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-2">Tools & Settings</h3>
+              <div className="bg-white rounded-xl p-2 shadow-sm border border-gray-100 space-y-1">
+                <button disabled={isModelLoading} onClick={() => { setIsWakeWordEnabled(!isWakeWordEnabled); showToast(isWakeWordEnabled ? `${dict.wakeWord} ${dict.off}` : `${dict.wakeWord} ${dict.on}`); }} className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 rounded-lg transition-colors cursor-pointer ${isWakeWordEnabled ? 'bg-green-50 text-green-700 font-bold' : 'hover:bg-gray-100 text-gray-700'}`}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                  <span className="flex-1">{dict.wakeWord}</span>
+                  <span className="text-[9px] font-bold uppercase">{isWakeWordEnabled ? dict.on : dict.off}</span>
+                </button>
+                <DesktopActionBtn onClick={handleCopyList} label={dict.copy} icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>} />
+                {user && (
+                  <>
+                    <DesktopActionBtn onClick={exportToGoogleTasks} color="text-blue-600" label={dict.export} icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>} />
+                    <DesktopActionBtn onClick={exportToCalendar} color="text-blue-600" label={dict.exportCalendar} icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>} />
+                  </>
+                )}
+              </div>
+            </div>
+
+            {!isDataLoaded ? <TaskListSkeleton /> : tasks.length === 0 ? (
+               <div className="text-center text-gray-400 mt-10 text-sm">{dict.noTasks}</div>
+            ) : (
+               Object.entries(groupedTasks).map(([category, items]) => (
+                  <div key={category} className="space-y-2">
+                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-2">{category}</h3>
+                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+                        {items.map(task => (
+                           <div key={task.id} className="p-3 pl-4 flex items-start gap-3 hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => toggleTask(task.id)}>
+                              <button className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 ${task.status === 'completed' ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>
+                                {task.status === 'completed' && <svg className="w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-sm break-words ${task.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{task.title}</div>
+                                {task.date && <div className="text-[10px] text-blue-500 font-medium mt-0.5 flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>{formatDate(task.date)}</div>}
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="text-gray-300 hover:text-red-500 p-2 -mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               ))
+            )}
           </div>
         </div>
+
+        {/* MOBILE OPTIONS PORTAL */}
+        {isOptionsMenuOpen && menuPosition && createPortal(
+          <div ref={optionsDropdownRef} className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95" style={{ top: menuPosition.top, right: menuPosition.right }}>
+             <button disabled={isModelLoading} onClick={() => { setIsWakeWordEnabled(!isWakeWordEnabled); setIsOptionsMenuOpen(false); showToast(isWakeWordEnabled ? `${dict.wakeWord} ${dict.off}` : `${dict.wakeWord} ${dict.on}`); }} className={`w-full text-left px-4 py-3 text-sm flex items-center gap-2 transition-colors border-b ${isModelLoading ? 'opacity-50' : 'hover:bg-gray-50'}`}>
+                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                <div className="flex-1 text-gray-700">{dict.wakeWord}</div>
+                <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isWakeWordEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>{isWakeWordEnabled ? dict.on : dict.off}</div>
+             </button>
+             {canShare && <button onClick={handleShareList} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>{dict.share}</button>}
+             <button onClick={handleCopyList} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>{dict.copy}</button>
+             {user && (
+                <>
+                  <button onClick={exportToGoogleTasks} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 border-t flex items-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>{dict.export}</button>
+                  <button onClick={exportToCalendar} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>{dict.exportCalendar}</button>
+                </>
+             )}
+          </div>,
+          document.body
+        )}
 
       </div>
     </div>
