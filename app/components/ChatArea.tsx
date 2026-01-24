@@ -52,13 +52,15 @@ export default function ChatArea({ messages, isLoading, dict }: ChatAreaProps) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
-    }
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
+      }
+    }, 250);
   }, [messages, isLoading]);
 
   return (
-    <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth pb-4 bg-gray-50/50">
+    <div ref={chatContainerRef} className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 scroll-smooth pb-4 bg-gray-50/50">
       {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} dict={dict} />)}
       {isLoading && (
         <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
