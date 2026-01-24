@@ -1,6 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { Message } from "../types";
 
+// Helper to parse **bold** text without external libraries
+const formatMessageContent = (text: string) => {
+  if (!text) return null;
+  // Split by bold markers (non-greedy)
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={index}>{part}</span>;
+  });
+};
+
 const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
   const [showTranscription, setShowTranscription] = useState(false);
   const isUser = msg.type === 'user';
@@ -34,8 +48,11 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
       )}
 
       {(!msg.audioUrl || showTranscription) && (
-        <div className={`break-words ${msg.audioUrl && isUser ? 'text-blue-100 italic' : ''}`}>
-           {msg.audioUrl ? (msg.transcription || "Transcribing...") : msg.content}
+        <div className={`break-words leading-relaxed ${msg.audioUrl && isUser ? 'text-blue-100 italic' : ''}`}>
+           {msg.audioUrl 
+             ? (msg.transcription || "Transcribing...") 
+             : formatMessageContent(msg.content || "")
+           }
         </div>
       )}
     </div>
@@ -52,11 +69,9 @@ export default function ChatArea({ messages, isLoading, dict }: ChatAreaProps) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setTimeout(() => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
-      }
-    }, 250);
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, isLoading]);
 
   return (
