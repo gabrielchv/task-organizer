@@ -33,12 +33,22 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const [taskButtonGlow, setTaskButtonGlow] = useState(false);
   const isFirstRender = useRef(true);
   
-  const optionsMenuRef = useRef<HTMLButtonElement>(null);
-
   // 2. Core Logic Hooks
+  // FIX: Call useTaskManager ONLY ONCE to ensure UI and Logic share the same state
   const { 
-    tasks, tasksRef, isDataLoaded, toggleTask, deleteTask, syncFirestoreFromAI, saveLocal 
+    tasks, 
+    tasksRef, 
+    isDataLoaded, 
+    toggleTask, 
+    deleteTask, 
+    syncFirestoreFromAI, 
+    saveLocal 
   } = useTaskManager(user, authLoading, dict, showToast);
+
+  // Ref to track previous tasks for deep comparison
+  const prevTasksRef = useRef(tasks);
+
+  const optionsMenuRef = useRef<HTMLButtonElement>(null);
 
   const { 
     messages, inputVal, setInputVal, isLoading, handleSend 
@@ -65,16 +75,23 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
     setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
   }, []);
 
-  // Effect to glow the button when tasks change
+  // Effect to glow the button ONLY when tasks content actually changes
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
+      prevTasksRef.current = tasks;
       return;
     }
     
-    setTaskButtonGlow(true);
-    const timer = setTimeout(() => setTaskButtonGlow(false), 1000);
-    return () => clearTimeout(timer);
+    // Deep compare to avoid glowing on same-data updates
+    const hasChanged = JSON.stringify(tasks) !== JSON.stringify(prevTasksRef.current);
+
+    if (hasChanged) {
+      setTaskButtonGlow(true);
+      const timer = setTimeout(() => setTaskButtonGlow(false), 1000);
+      prevTasksRef.current = tasks;
+      return () => clearTimeout(timer);
+    }
   }, [tasks]);
 
   const toggleOptionsMenu = () => {
