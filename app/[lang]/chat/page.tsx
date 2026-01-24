@@ -29,6 +29,10 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   const [menuPosition, setMenuPosition] = useState<{ top: number, right: number } | null>(null);
   const [canShare, setCanShare] = useState(false);
   
+  // Notification state for mobile button
+  const [taskButtonGlow, setTaskButtonGlow] = useState(false);
+  const isFirstRender = useRef(true);
+  
   const optionsMenuRef = useRef<HTMLButtonElement>(null);
 
   // 2. Core Logic Hooks
@@ -60,6 +64,18 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   useEffect(() => {
     setCanShare(typeof navigator !== 'undefined' && 'share' in navigator);
   }, []);
+
+  // Effect to glow the button when tasks change
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    
+    setTaskButtonGlow(true);
+    const timer = setTimeout(() => setTaskButtonGlow(false), 1000);
+    return () => clearTimeout(timer);
+  }, [tasks]);
 
   const toggleOptionsMenu = () => {
     if (isOptionsMenuOpen) {
@@ -114,7 +130,16 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
           <div className="bg-white border-t border-gray-200 shrink-0 safe-area-bottom z-30">
             <div className="p-3 flex gap-2 items-center max-w-3xl mx-auto w-full">
-              <button onClick={() => setShowTaskMenuMobile(true)} className="md:hidden p-3 rounded-full bg-gray-100 text-gray-500 cursor-pointer">
+              
+              {/* Task Menu Button with Glow Effect */}
+              <button 
+                onClick={() => setShowTaskMenuMobile(true)} 
+                className={`md:hidden p-3 rounded-full transition-all duration-500 cursor-pointer ${
+                  taskButtonGlow 
+                    ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)] scale-105' 
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
               </button>
               

@@ -106,7 +106,7 @@ export default function TaskSidebar({
                                 {task.status === 'completed' && <svg className="w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
                             </button>
                             
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 flex flex-col my-auto">
                                 <div className={`text-sm break-words ${task.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                                 {task.title}
                                 </div>
