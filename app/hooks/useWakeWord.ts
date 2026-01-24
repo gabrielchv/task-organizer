@@ -1,120 +1,94 @@
 import { useState, useEffect, useRef } from "react";
-import * as tf from "@tensorflow/tfjs";
-import * as speechCommands from "@tensorflow-models/speech-commands";
-import "@tensorflow/tfjs-backend-webgl";
-import "@tensorflow/tfjs-backend-cpu";
+import { usePorcupine } from "@picovoice/porcupine-react";
+
+// Configuration for the wake word
+const WAKE_WORD_CONFIG = {
+  label: "organizer",
+  publicPath: "/model/organizer.ppn", // Make sure this matches your file name in public/model/
+};
+
+const MODEL_PARAMS = {
+  publicPath: "/model/porcupine_params.pv",
+};
 
 export function useWakeWord(isRecording: boolean, onWakeTrigger: () => void) {
-  const [model, setModel] = useState<speechCommands.SpeechCommandRecognizer | null>(null);
-  const [isModelLoading, setIsModelLoading] = useState(true);
+  // We keep the exact same API state variables as your previous version
   const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(false);
   
-  // 1. Keep the callback stable to prevent re-initialization loops
+  // Use a ref to ensure we always call the latest version of the callback
   const onWakeTriggerRef = useRef(onWakeTrigger);
   useEffect(() => {
     onWakeTriggerRef.current = onWakeTrigger;
   }, [onWakeTrigger]);
 
-  // Support both keywords
-  const WAKE_WORDS = ["organizer", "organizador"];
+  const {
+    keywordDetection,
+    isLoaded,
+    isListening,
+    init,
+    start,
+    stop,
+    release,
+    error,
+  } = usePorcupine();
 
-  // 2. Load Model Once
+  // 1. Initialize Porcupine on mount
   useEffect(() => {
-    let mounted = true;
-    const loadModel = async () => {
-      try {
-        await tf.ready();
-        const baseUrl = window.location.origin;
-        const recognizer = speechCommands.create(
-          "BROWSER_FFT", 
-          undefined, 
-          `${baseUrl}/model/task-organizer-model.json`, 
-          `${baseUrl}/model/metadata.json`
-        );
-        await recognizer.ensureModelLoaded();
-        if (mounted) {
-            setModel(recognizer);
-            setIsModelLoading(false);
-        }
-      } catch (error) {
-        console.error("Model Error:", error);
-        if (mounted) setIsModelLoading(false);
-      }
+    init(
+      "SM2k7DYZr9RIZk3bBsTAdIocmctOFfopluquGnmcMJA5IO88w+txqg==",
+      [WAKE_WORD_CONFIG],
+      MODEL_PARAMS
+    );
+
+    // Cleanup when component unmounts
+    return () => {
+      release();
     };
-    loadModel();
-    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 3. Manage Listening State (Robustly)
+  // 2. Handle Wake Word Detection
   useEffect(() => {
-    if (!model || isModelLoading) return;
+    if (keywordDetection !== null && keywordDetection.label === "organizer") {
+      console.log("Wake word detected:", keywordDetection.label);
+      onWakeTriggerRef.current();
+    }
+  }, [keywordDetection]);
 
-    // We only listen if enabled AND NOT currently recording
+  // 3. Manage Listening State
+  // We sync the Porcupine state with your app's requirements (enabled + not recording)
+  useEffect(() => {
+    // Wait until model is loaded
+    if (!isLoaded) return;
+
+    // Logic: Only listen if user enabled it AND we are not currently recording audio
     const shouldListen = isWakeWordEnabled && !isRecording;
-    
-    const toggleListening = async () => {
-        try {
-            if (shouldListen) {
-                // START LISTENING
-                if (!model.isListening()) {
-                    try {
-                        await model.listen(async (result) => {
-                            const scores = result.scores as Float32Array;
-                            const maxScore = Math.max(...scores);
-                            const maxScoreIndex = scores.indexOf(maxScore);
-                            const detectedWord = model.wordLabels()[maxScoreIndex];
-                            
-                            // Use Ref to call the latest callback
-                            if (WAKE_WORDS.includes(detectedWord) && maxScore > 0.92) {
-                               console.log("Wake word detected:", detectedWord);
-                               onWakeTriggerRef.current();
-                            }
-                        }, {
-                            includeSpectrogram: false,
-                            probabilityThreshold: 0.85, 
-                            invokeCallbackOnNoiseAndUnknown: true,
-                            overlapFactor: 0.5 
-                        });
-                    } catch (err: any) {
-                        // Ignore "Streaming is ongoing" error (it means we are good)
-                        if (!err.message?.includes('streaming is ongoing')) {
-                           console.error("Start Listening Error:", err);
-                        }
-                    }
-                }
-            } else {
-                // STOP LISTENING
-                if (model.isListening()) {
-                    try {
-                        await model.stopListening();
-                    } catch (err: any) {
-                        // CRITICAL FIX: Ignore "no ongoing streaming" error
-                        // This happens if the stream cut out before we could stop it.
-                        if (!err.message?.includes('no ongoing streaming')) {
-                            console.error("Stop Listening Error:", err);
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            console.error("Wake Word Toggle Error:", error);
+
+    const manageState = async () => {
+      try {
+        if (shouldListen && !isListening) {
+          await start();
+        } else if (!shouldListen && isListening) {
+          await stop();
         }
+      } catch (err) {
+        console.error("Porcupine toggle error:", err);
+      }
     };
 
-    toggleListening();
+    manageState();
+  }, [isWakeWordEnabled, isRecording, isLoaded, isListening, start, stop]);
 
-    // Cleanup on unmount only
-    return () => {
-        if (model && model.isListening()) {
-             model.stopListening().catch(() => {});
-        }
-    };
-    // Note: We intentionally exclude 'onWakeTrigger' from deps to avoid restarting listener
-  }, [model, isModelLoading, isWakeWordEnabled, isRecording]);
+  // Log errors if any occur during initialization or processing
+  useEffect(() => {
+    if (error) {
+      console.error("Porcupine Error:", error);
+    }
+  }, [error]);
 
   return {
-    isModelLoading,
+    isModelLoading: !isLoaded, // Map isLoaded to isModelLoading for compatibility
     isWakeWordEnabled,
-    setIsWakeWordEnabled
+    setIsWakeWordEnabled,
   };
 }
