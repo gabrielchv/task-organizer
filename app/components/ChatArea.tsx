@@ -46,10 +46,9 @@ interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
   dict: any;
-  isHidden: boolean;
 }
 
-export default function ChatArea({ messages, isLoading, dict, isHidden }: ChatAreaProps) {
+export default function ChatArea({ messages, isLoading, dict }: ChatAreaProps) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,19 +58,15 @@ export default function ChatArea({ messages, isLoading, dict, isHidden }: ChatAr
   }, [messages, isLoading]);
 
   return (
-    <div 
-      className={`absolute inset-0 flex flex-col transition-all duration-300 ${isHidden ? 'opacity-0 pointer-events-none scale-95' : 'opacity-100 scale-100'}`}
-    >
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth pb-4">
-        {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} dict={dict} />)}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
-            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
-            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
-          </div>
-        )}
-      </div>
+    <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth pb-4 bg-gray-50/50">
+      {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} dict={dict} />)}
+      {isLoading && (
+        <div className="flex items-center gap-2 text-xs text-gray-400 ml-2">
+          <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+          <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
+          <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
+        </div>
+      )}
     </div>
   );
 }
