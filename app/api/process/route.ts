@@ -27,6 +27,7 @@ const PROMPTS = {
       1. ACT COMPLETELY REAL. Do not mention "simulation", "demo", or "I cannot do that".
       2. Do NOT write "(simulated pause)". Just use "..." to convey time passing.
       3. Respond in the 'summary' confidently confirming the action.
+      4. CRITICAL: You MUST automatically ADD A NEW TASK for this appointment to the 'tasks' list (e.g., "Dinner at Steak Bife", category: "Appointment" or "Food").
     - Example: "Calling Jacquin's restaurant... Okay! I just spoke with the receptionist and your reservation is confirmed for 8 PM."
 
     [APP INTERFACE & NAVIGATION]
@@ -62,10 +63,9 @@ const PROMPTS = {
       "summary": "Calling the clinic... Done! Appointment confirmed for Friday at 2 PM.",
       "tasks": [
         { "id": "t-1", "title": "Buy milk", "status": "pending", "category": "Market", "date": null },
-        { "id": "t-2", "title": "Dentist", "status": "pending", "category": "Health", "date": "2024-10-25T14:00:00" },
-        { "id": "t-3", "title": "Call Mom", "status": "pending", "category": "Personal", "date": "2024-10-26" } 
+        { "id": "t-2", "title": "Dentist Appointment", "status": "pending", "category": "Health", "date": "2024-10-25T14:00:00" }
       ],
-      "transcription": "Schedule dentist for friday at 2pm and call mom on saturday"
+      "transcription": "Schedule dentist for friday at 2pm"
     }
   `,
   'pt-BR': `
@@ -84,6 +84,7 @@ const PROMPTS = {
       1. AJA COMO SE FOSSE 100% REAL. Nunca diga que é uma simulação, "pausa simulada" ou que você não pode fazer isso.
       2. Use apenas reticências "..." para indicar que o tempo passou enquanto você ligava.
       3. Responda no 'summary' confirmando o sucesso da operação.
+      4. CRÍTICO: Você DEVE automaticamente ADICIONAR UMA NOVA TAREFA representando este compromisso à lista 'tasks' (ex: "Jantar no Steak Bife", categoria: "Compromisso" ou "Lazer").
     - Exemplo Ideal: "Ligando para o Président... Certo! Acabei de falar com a recepção e sua reserva está confirmada para às 20h."
 
     [INTERFACE E NAVEGAÇÃO DO APP]
@@ -119,10 +120,9 @@ const PROMPTS = {
       "summary": "Ligando para o consultório... Tudo certo! Consulta confirmada para sexta às 14h.",
       "tasks": [
         { "id": "t-1", "title": "Comprar leite", "status": "pending", "category": "Mercado", "date": null },
-        { "id": "t-2", "title": "Dentista", "status": "pending", "category": "Saúde", "date": "2024-10-25T14:00:00" },
-        { "id": "t-3", "title": "Ligar Mãe", "status": "pending", "category": "Pessoal", "date": "2024-10-26" }
+        { "id": "t-2", "title": "Dentista", "status": "pending", "category": "Saúde", "date": "2024-10-25T14:00:00" }
       ],
-      "transcription": "Marcar dentista para sexta as 14h e ligar pra mãe no sábado"
+      "transcription": "Marcar dentista para sexta as 14h"
     }
   `
 };
