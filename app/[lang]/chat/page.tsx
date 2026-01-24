@@ -83,7 +83,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   };
 
   return (
-    <div className="fixed inset-0 flex justify-center items-center bg-[#1a1a1a] overflow-hidden font-sans">
+    <div className="fixed inset-0 h-[100dvh] flex justify-center items-center bg-[#1a1a1a] overflow-hidden font-sans">
       <div className="w-full h-full md:h-[95vh] md:w-[95vw] md:rounded-2xl overflow-hidden md:max-w-5xl bg-gray-50 flex flex-col md:flex-row shadow-2xl relative">
         
         {/* TOAST */}
@@ -94,7 +94,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
         )}
 
         {/* LEFT: CHAT AREA */}
-        <div className={`flex-1 flex flex-col min-w-0 bg-white border-r border-gray-100 transition-all duration-300 ${showTaskMenuMobile ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-1 flex flex-col min-w-0 overflow-hidden bg-white border-r border-gray-100 transition-all duration-300 ${showTaskMenuMobile ? 'hidden md:flex' : 'flex'}`}>
           <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-30 shadow-sm min-h-15 md:h-18">
             <h1 className="font-bold text-gray-800 text-lg tracking-tight">{dict.title}</h1>
             <div className="flex items-center gap-2">
