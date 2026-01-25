@@ -68,7 +68,7 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
 
   const { 
     isModelLoading, isWakeWordEnabled, setIsWakeWordEnabled 
-  } = useWakeWord(isRecording, triggerWakeWordRecording);
+  } = useWakeWord(isRecording, triggerWakeWordRecording, lang);
 
   // 3. UI Event Handling
   useEffect(() => {
