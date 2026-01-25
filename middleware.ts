@@ -55,7 +55,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip internal paths and the model folder
-    '/((?!api|_next/static|_next/image|favicon.ico|model|.*\\.svg|.*\\.json|.*\\.bin).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|model).*)',
   ],
 }
