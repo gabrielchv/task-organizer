@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 
 interface MobileOptionsProps {
   isOpen: boolean;
@@ -26,6 +26,7 @@ export default function MobileOptions({
 }: MobileOptionsProps) {
   
   const menuRef = useRef<HTMLDivElement>(null);
+  const [adjustedRight, setAdjustedRight] = useState<number | null>(null);
 
   // Handle click outside
   useEffect(() => {
@@ -49,13 +50,47 @@ export default function MobileOptions({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen, onClose, triggerRef]);
 
+  // Adjust position if menu goes off-screen
+  useEffect(() => {
+    if (isOpen && position && menuRef.current) {
+        const menuRect = menuRef.current.getBoundingClientRect();
+        const screenWidth = window.innerWidth;
+        const margin = 10; // Margin from the edge of the screen
+
+        let newRight = position.right;
+
+        // Check if the menu goes off the left edge (right value is too large)
+        // 'right' in CSS styles the distance from the right edge.
+        // The menu's left edge is roughly: screenWidth - newRight - menuWidth
+        const calculatedLeft = screenWidth - newRight - menuRect.width;
+
+        if (calculatedLeft < margin) {
+            // It's overflowing left, so push it to the right
+            // We set the right value such that left = margin
+            // screenWidth - newRight - menuWidth = margin
+            // newRight = screenWidth - menuWidth - margin
+            newRight = screenWidth - menuRect.width - margin;
+        } 
+        // Check if it's too close to the right edge is implicitly handled by 'position.right' usually being positive,
+        // but we can ensure it doesn't get negative or too small.
+        else if (newRight < margin) {
+            newRight = margin;
+        }
+
+        setAdjustedRight(newRight);
+    }
+  }, [isOpen, position]);
+
   if (!isOpen || !position) return null;
 
   return createPortal(
     <div 
         ref={menuRef}
-        className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-48 py-1 overflow-hidden animate-in fade-in zoom-in-95" 
-        style={{ top: position.top, right: position.right }}
+        className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-60 py-1 overflow-hidden animate-in fade-in" 
+        style={{ 
+            top: position.top, 
+            right: adjustedRight ?? position.right
+        }}
     >
         <button 
             disabled={isModelLoading} 
@@ -63,11 +98,11 @@ export default function MobileOptions({
             className={`w-full text-left px-4 py-3 text-sm flex items-center gap-2 transition-colors border-b ${isModelLoading ? 'opacity-50' : 'hover:bg-gray-50'}`}
         >
             <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
-            <div className="flex flex-col gap-0.5">
-                <div className="flex-1 text-gray-700">{dict.wakeWord}</div>
-                <span className="text-gray-700">(organizer)</span>
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <div className="text-gray-700 font-medium">{dict.wakeWord}</div>
+                <span className="text-[10px] text-gray-400 font-normal truncate">{dict.wakeWordLabel}</span>
             </div>
-            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isWakeWordEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${isWakeWordEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
                 {isWakeWordEnabled ? dict.on : dict.off}
             </div>
         </button>

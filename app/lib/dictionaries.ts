@@ -29,6 +29,7 @@ const dictionaries = {
     category: "Category",
     date: "Date",
     wakeWord: "Wake Word",
+    wakeWordLabel: "Say 'hey organizer'",
     on: "On",
     off: "Off",
     // --- Landing Page ---
@@ -73,6 +74,7 @@ const dictionaries = {
     category: "Categoria",
     date: "Data",
     wakeWord: "Auto Ativação",
+    wakeWordLabel: "Diga 'olá organizador'",
     on: "Ligado",
     off: "Desligado",
     // --- Landing Page ---
