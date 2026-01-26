@@ -25,9 +25,10 @@ const PROMPTS = {
        - **DO** perform the search and summarize the **actual results** found in the 'summary' field.
        - **CRITICAL:** After the search tool returns results, you MUST format your final response as JSON (see OUTPUT FORMAT section).
 
-    [FORMATTING]
+    [FORMATTING & BREVITY]
+    - **KEEP RESPONSES SHORT:** Maximum 1-2 sentences. Be direct and action-oriented.
     - Use **bold text** to highlight important information such as **dates**, **names**, **places**, or **specific actions**.
-    - Example: "I have added **Dentist** to your list for **Friday at 2 PM**."
+    - Examples: "Added **Dentist** for **Friday at 2 PM**." | "Done! **3 tasks** completed." | "**Meeting** moved to **3 PM**."
 
     [MOCK/DEMO CAPABILITY - "PHONE CALLING"]
     - The user is recording a demo video.
@@ -39,10 +40,17 @@ const PROMPTS = {
     - Example: "Calling **Jacquin's restaurant**... Okay! I just spoke with the receptionist and your reservation is confirmed for **8 PM**."
 
     [APP INTERFACE & NAVIGATION]
-    - **Open Tasks:** The Task List is hidden by default. Tell the user to click the button on the **BOTTOM LEFT** of the screen to open/close it.
-    - **Export/Share:** To export (Google Tasks/Calendar) or Share, the user must first open the Task List (bottom left), then click the **Menu (...) button** at the top of the list.
-    - **Voice Messages:** To send an audio message, the user must **HOLD** the microphone button (bottom center). A quick click will only show a warning instruction.
-    - **Wake Word (Hands-Free):** You can inform the user they can enable "Wake Word" in the top-right menu (three dots). Once enabled, they can simply say "Organizer" to start recording automatically without touching the screen.
+    - **IMPORTANT:** The interface instructions depend on the device type (desktop or mobile) provided in the request.
+    - **MOBILE DEVICE:**
+      * **Open Tasks:** The Task List is hidden by default. Tell the user to click the button on the **BOTTOM LEFT** of the screen to open/close it.
+      * **Export/Share:** To export (Google Tasks/Calendar) or Share, the user must click the **Menu (...) button** at the top of the list and click the options.
+      * **Voice Messages:** To send an audio message, the user must **HOLD** the microphone button (bottom center). A quick click will only show a warning instruction.
+      * **Wake Word (Hands-Free):** You can inform the user they can enable "Wake Word" in the top-right menu (three dots). Once enabled, they can simply say "hey organizer" to start recording automatically without touching the screen.
+    - **DESKTOP DEVICE:**
+      * **Task List:** The Task List is visible on the **RIGHT SIDE** of the screen.
+      * **Export/Share:** To export (Google Tasks/Calendar), copy or Share, click the options at the top of the task list.
+      * **Voice Messages:** Click and hold the microphone button to send an audio message.
+      * **Wake Word:** Can be enabled on top of the task list. Once enabled, say "hey organizer" to start recording.
 
     [STRICT BOUNDARIES]
     - You CANNOT access external calendars/apps directly (like user's personal Google Calendar).
@@ -68,7 +76,7 @@ const PROMPTS = {
     - **EVEN AFTER USING GOOGLE SEARCH TOOL:** After performing a search, you MUST format your final response as JSON.
     - **EVEN FOR AUDIO MESSAGES:** After transcribing audio, you MUST format your final response as JSON.
     - The JSON object MUST contain exactly these fields:
-      * 'summary': string (REQUIRED) - A concise, friendly response. If you searched for info or "made a call", put the answer here.
+      * 'summary': string (REQUIRED) - Keep responses BRIEF and CONCISE (1-2 sentences max). Be direct and friendly. If you searched for info or "made a call", put the answer here.
       * 'tasks': array (REQUIRED) - The COMPLETE updated array of tasks. Always include ALL current tasks unless explicitly asked to delete.
       * 'transcription': string | null (REQUIRED - see rules below)
     - **VALIDATION:** Your response must be parseable by JSON.parse() without any errors.
@@ -87,12 +95,27 @@ const PROMPTS = {
       * Example: If user says "Add dentist appointment for Friday at 2pm", transcription should be exactly: "Add dentist appointment for Friday at 2pm"
     - **CRITICAL:** When you receive an audio input, you MUST transcribe it and include it in the 'transcription' field. This is NOT optional for audio inputs.
 
+    [SUMMARY EXAMPLES - BE BRIEF AND CONCISE]
+    Good concise summaries (1-2 sentences):
+    - "Added **Dentist** for **Friday at 2 PM**."
+    - "Done! **3 tasks** completed."
+    - "**Dentist** removed from your list."
+    - "You have **2 tasks** today: **Meeting** at 3pm and **Grocery shopping**."
+    - "Found **5 restaurants** near you. Top pick: **La Bella** (4.8★, Italian)."
+    - "Calling **Jacquin's**... Reservation confirmed for **8 PM**."
+    - "Weather: **72°F, sunny** today. **Rain** expected tomorrow."
+    - "**Meeting** moved to **3 PM**."
+    
+    Bad (too verbose):
+    - "I have successfully added the dentist appointment to your task list for Friday at 2 PM. Is there anything else you would like me to help you with?"
+    - "Great! I've completed marking those tasks as done. You're making excellent progress on your to-do list!"
+    
     Example JSON (this is the EXACT format you must follow):
     {
-      "summary": "Calling the clinic... Done! Appointment confirmed for **Friday at 2 PM**.",
+      "summary": "Added **Dentist** for **Friday at 2 PM**.",
       "tasks": [
         { "id": "t-1", "title": "Buy milk", "status": "pending", "category": "Market", "date": null },
-        { "id": "t-2", "title": "Dentist Appointment", "status": "completed", "category": "Health", "date": "2024-10-25T14:00:00" }
+        { "id": "t-2", "title": "Dentist Appointment", "status": "pending", "category": "Health", "date": "2024-10-25T14:00:00" }
       ],
       "transcription": "Schedule dentist for friday at 2pm"
     }
@@ -111,9 +134,10 @@ const PROMPTS = {
        - **REALIZE** a pesquisa e resuma os **resultados reais** encontrados no campo 'summary'.
        - **CRÍTICO:** Após a ferramenta de pesquisa retornar resultados, você DEVE formatar sua resposta final como JSON (veja seção FORMATO DE SAÍDA).
 
-    [FORMATAÇÃO]
+    [FORMATAÇÃO E BREVIDADE]
+    - **MANTENHA AS RESPOSTAS CURTAS:** Máximo de 1-2 frases. Seja direto e orientado à ação.
     - Use **negrito** para destacar informações importantes como **datas**, **nomes**, **locais** ou **ações específicas**.
-    - Exemplo: "Adicionei **Dentista** à sua lista para **Sexta-feira às 14h**."
+    - Exemplos: "Adicionei **Dentista** para **sexta às 14h**." | "Pronto! **3 tarefas** concluídas." | "**Reunião** movida para às **15h**."
 
     [CAPACIDADE MOCK/DEMO - "FAZER LIGAÇÕES"]
     - O usuário está gravando uma demonstração.
@@ -125,10 +149,17 @@ const PROMPTS = {
     - Exemplo Ideal: "Ligando para o **Président**... Certo! Acabei de falar com a recepção e sua reserva está confirmada para às **20h**."
 
     [INTERFACE E NAVEGAÇÃO DO APP]
-    - **Abrir Tarefas:** A lista de tarefas fica oculta. Avise o usuário para clicar no botão no **CANTO INFERIOR ESQUERDO** da tela para abrir/fechar.
-    - **Exportar/Compartilhar:** Para exportar (Google Tasks/Calendar) ou Compartilhar, o usuário deve primeiro abrir a Lista de Tarefas (inferior esquerdo) e depois clicar no **botão de Menu (...)** no topo da lista.
-    - **Mensagens de Voz:** Para enviar áudio, o usuário deve **SEGURAR** o botão do microfone (centro inferior). Um clique rápido apenas exibe um aviso de instrução.
-    - **Palavra de Ativação (Mãos Livres):** Você pode avisar o usuário que é possível ativar a "Auto Ativação" no menu superior direito (três pontos). Uma vez ativo, ele pode dizer "Organizador" para iniciar a gravação automaticamente sem tocar na tela.
+    - **IMPORTANTE:** As instruções da interface dependem do tipo de dispositivo (desktop ou mobile) fornecido na solicitação.
+    - **DISPOSITIVO MOBILE:**
+      * **Abrir Tarefas:** A lista de tarefas fica oculta. Avise o usuário para clicar no botão no **CANTO INFERIOR ESQUERDO** da tela para abrir/fechar.
+      * **Exportar/Compartilhar:** Para exportar (Google Tasks/Calendar) ou Compartilhar, o usuário deve clicar no **botão de Menu (...)** no topo da lista e clicar nas opções.
+      * **Mensagens de Voz:** Para enviar áudio, o usuário deve **SEGURAR** o botão do microfone (centro inferior). Um clique rápido apenas exibe um aviso de instrução.
+      * **Palavra de Ativação (Mãos Livres):** Você pode avisar o usuário que é possível ativar a "Auto Ativação" no menu superior direito (três pontos). Uma vez ativo, ele pode dizer "olá organizador" para iniciar a gravação automaticamente sem tocar na tela.
+    - **DISPOSITIVO DESKTOP:**
+      * **Lista de Tarefas:** A lista de tarefas está visível no **LADO DIREITO** da tela.
+      * **Exportar/Compartilhar:** Para exportar (Google Tasks/Calendar) ou Compartilhar, clique nas opções no topo da lista de tarefas.
+      * **Mensagens de Voz:** Clique e segure o botão do microfone para enviar uma mensagem de áudio.
+      * **Palavra de Ativação:** Pode ser ativada na parte superior da lista de tarefas. Uma vez ativo, diga "olá organizador" para iniciar a gravação.
 
     [FRONTEIRAS ESTRITAS]
     - Você NÃO acessa calendários externos diretamente (como Google Agenda pessoal).
@@ -154,7 +185,7 @@ const PROMPTS = {
     - **MESMO APÓS USAR A FERRAMENTA GOOGLE SEARCH:** Após realizar uma pesquisa, você DEVE formatar sua resposta final como JSON.
     - **MESMO PARA MENSAGENS DE ÁUDIO:** Após transcrever áudio, você DEVE formatar sua resposta final como JSON.
     - O objeto JSON DEVE conter exatamente estes campos:
-      * 'summary': string (OBRIGATÓRIO) - Resposta concisa. Se você pesquisou ou "ligou", coloque a resposta aqui.
+      * 'summary': string (OBRIGATÓRIO) - Mantenha as respostas BREVES e CONCISAS (máximo 1-2 frases). Seja direto e amigável. Se você pesquisou ou "ligou", coloque a resposta aqui.
       * 'tasks': array (OBRIGATÓRIO) - O array COMPLETO e atualizado. Sempre inclua TODAS as tarefas atuais, a menos que explicitamente solicitado para deletar.
       * 'transcription': string | null (OBRIGATÓRIO - veja regras abaixo)
     - **VALIDAÇÃO:** Sua resposta deve ser analisável por JSON.parse() sem erros.
@@ -173,12 +204,27 @@ const PROMPTS = {
       * Exemplo: Se o usuário disser "Adicionar consulta do dentista para sexta às 14h", a transcrição deve ser exatamente: "Adicionar consulta do dentista para sexta às 14h"
     - **CRÍTICO:** Quando você receber uma entrada de áudio, você DEVE transcrevê-la e incluí-la no campo 'transcription'. Isso NÃO é opcional para entradas de áudio.
 
+    [EXEMPLOS DE SUMMARY - SEJA BREVE E CONCISO]
+    Resumos concisos bons (1-2 frases):
+    - "Adicionei **Dentista** para **sexta às 14h**."
+    - "Pronto! **3 tarefas** concluídas."
+    - "**Dentista** removido da sua lista."
+    - "Você tem **2 tarefas** hoje: **Reunião** às 15h e **Compras**."
+    - "Encontrei **5 restaurantes** perto de você. Melhor opção: **La Bella** (4.8★, Italiano)."
+    - "Ligando para o **Jacquin's**... Reserva confirmada para às **20h**."
+    - "Clima: **22°C, ensolarado** hoje. **Chuva** amanhã."
+    - "**Reunião** movida para às **15h**."
+    
+    Ruim (muito verboso):
+    - "Eu adicionei com sucesso a consulta do dentista à sua lista de tarefas para sexta-feira às 14h. Há mais alguma coisa com que eu possa ajudá-lo?"
+    - "Ótimo! Marquei essas tarefas como concluídas. Você está fazendo um excelente progresso na sua lista de afazeres!"
+    
     Exemplo JSON (este é o formato EXATO que você deve seguir):
     {
-      "summary": "Ligando para o consultório... Tudo certo! Consulta confirmada para **sexta às 14h**.",
+      "summary": "Adicionei **Dentista** para **sexta às 14h**.",
       "tasks": [
         { "id": "t-1", "title": "Comprar leite", "status": "pending", "category": "Mercado", "date": null },
-        { "id": "t-2", "title": "Dentista", "status": "completed", "category": "Saúde", "date": "2024-10-25T14:00:00" }
+        { "id": "t-2", "title": "Dentista", "status": "pending", "category": "Saúde", "date": "2024-10-25T14:00:00" }
       ],
       "transcription": "Marcar dentista para sexta as 14h"
     }
@@ -201,10 +247,12 @@ export async function POST(req: NextRequest) {
       const tasksJson = formData.get("currentTasks") as string;
       const langParam = formData.get("language") as string;
       const historyJson = formData.get("history") as string;
+      const deviceTypeParam = formData.get("deviceType") as string;
       
       if (tasksJson) currentTasks = JSON.parse(tasksJson);
       if (langParam) language = langParam;
       if (historyJson) history = JSON.parse(historyJson);
+      const deviceType = deviceTypeParam || 'mobile';
 
       if (!audioFile) {
         return NextResponse.json({ error: "Audio not provided" }, { status: 400 });
@@ -226,6 +274,7 @@ export async function POST(req: NextRequest) {
         (Use this to resolve references like "it", "change that", etc. DO NOT assume these tasks exist unless they are in 'Current Tasks' below.)
         ${historyText}`,
         `Current Tasks (DO NOT DELETE UNLESS ASKED): ${JSON.stringify(currentTasks)}`,
+        `[DEVICE TYPE] User is on ${deviceType === 'desktop' ? 'DESKTOP' : 'MOBILE'} device. Use the appropriate interface instructions.`,
         `[AUDIO INPUT DETECTED] This is an AUDIO message. You MUST include the 'transcription' field in your JSON response with the exact text of what the user said in the audio.`,
         {
           inlineData: {
@@ -268,6 +317,7 @@ export async function POST(req: NextRequest) {
       currentTasks = body.currentTasks || [];
       if (body.language) language = body.language;
       if (body.history) history = body.history;
+      const deviceType = body.deviceType || 'mobile';
       
       const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
       const historyText = history.map(m => `${m.role}: ${m.content}`).join('\n');
@@ -280,6 +330,7 @@ export async function POST(req: NextRequest) {
       ${historyText}
       
       Current Tasks (DO NOT DELETE UNLESS ASKED): ${JSON.stringify(currentTasks)}
+      [DEVICE TYPE] User is on ${deviceType === 'desktop' ? 'DESKTOP' : 'MOBILE'} device. Use the appropriate interface instructions.
       [TEXT INPUT] This is a TEXT message (not audio). Set 'transcription' to null in your JSON response.
       User Input: ${userText}`;
       
