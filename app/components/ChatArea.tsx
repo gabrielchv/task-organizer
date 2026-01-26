@@ -31,7 +31,9 @@ const ChatMessage = ({ msg, dict }: { msg: Message, dict: any }) => {
         <div className="w-full min-w-[200px]">
           <audio 
             controls 
-            src={msg.audioUrl} 
+            src={msg.audioUrl}
+            preload="metadata"
+            playsInline
             className="w-full h-8 rounded opacity-90 contrast-125 mix-blend-screen cursor-pointer"
             style={{ filter: isUser ? 'invert(1) hue-rotate(180deg)' : 'none' }}
           />

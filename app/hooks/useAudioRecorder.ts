@@ -33,6 +33,28 @@ export function useAudioRecorder({ onRecordingComplete, showToast, dict }: Recor
     }
   }, []);
 
+  // Helper to detect the best supported audio mimeType for the device
+  const getSupportedMimeType = useCallback(() => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/m4a',
+      'audio/aac',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+    ];
+    
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    
+    // Fallback: return empty string to let browser choose default
+    return '';
+  }, []);
+
   // Helper to start recording (Stable Reference)
   const startRecordingLogic = useCallback(async (useVAD = false) => {
     isPressingRef.current = true;
@@ -46,9 +68,17 @@ export function useAudioRecorder({ onRecordingComplete, showToast, dict }: Recor
         return;
       }
 
-      const mediaRecorder = new MediaRecorder(stream);
+      // Detect the best supported mimeType for this device
+      const mimeType = getSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+      
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      
+      // Store the actual mimeType used by the recorder
+      const actualMimeType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+      
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       
       mediaRecorder.onstop = () => {
@@ -58,7 +88,9 @@ export function useAudioRecorder({ onRecordingComplete, showToast, dict }: Recor
         if (duration < 500) {
           showToast(dict.holdToRecord);
         } else {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          // Use the actual mimeType from the recorder, or fallback to detected type
+          const blobType = actualMimeType.split(';')[0]; // Remove codec info if present
+          const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
           onRecordingComplete(audioBlob);
         }
         
@@ -119,7 +151,7 @@ export function useAudioRecorder({ onRecordingComplete, showToast, dict }: Recor
       isPressingRef.current = false;
       setIsWakeWordTriggered(false);
     }
-  }, [dict.holdToRecord, onRecordingComplete, showToast, stopRecordingLogic]);
+  }, [dict.holdToRecord, onRecordingComplete, showToast, stopRecordingLogic, getSupportedMimeType]);
 
   // Stable trigger for Wake Word hook
   const triggerWakeWordRecording = useCallback(async () => {
