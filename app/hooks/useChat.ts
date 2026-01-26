@@ -45,6 +45,9 @@ export function useChat({
     const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
     const deviceType = isDesktop ? 'desktop' : 'mobile';
 
+    // Get current date/time from browser (user's local timezone)
+    const currentDateTime = new Date().toISOString();
+
     if (!isAudio) setInputVal("");
     setIsLoading(true);
 
@@ -57,13 +60,14 @@ export function useChat({
         formData.append('language', lang); 
         formData.append('history', JSON.stringify(history));
         formData.append('deviceType', deviceType);
+        formData.append('currentDateTime', currentDateTime);
         
         response = await fetch('/api/process', { method: 'POST', body: formData });
       } else {
         response = await fetch('/api/process', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ text: content, currentTasks: tasksRef.current, language: lang, history, deviceType }) 
+            body: JSON.stringify({ text: content, currentTasks: tasksRef.current, language: lang, history, deviceType, currentDateTime }) 
         });
       }
 

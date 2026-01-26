@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
     let currentTasks = [];
     let language = "en-US";
     let history: { role: string, content: string }[] = [];
-    const now = new Date().toISOString();
+    let now = new Date().toISOString(); // Fallback to server time if client doesn't provide
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -248,10 +248,12 @@ export async function POST(req: NextRequest) {
       const langParam = formData.get("language") as string;
       const historyJson = formData.get("history") as string;
       const deviceTypeParam = formData.get("deviceType") as string;
+      const currentDateTimeParam = formData.get("currentDateTime") as string;
       
       if (tasksJson) currentTasks = JSON.parse(tasksJson);
       if (langParam) language = langParam;
       if (historyJson) history = JSON.parse(historyJson);
+      if (currentDateTimeParam) now = currentDateTimeParam; // Use client-provided date/time
       const deviceType = deviceTypeParam || 'mobile';
 
       if (!audioFile) {
@@ -340,6 +342,7 @@ export async function POST(req: NextRequest) {
       currentTasks = body.currentTasks || [];
       if (body.language) language = body.language;
       if (body.history) history = body.history;
+      if (body.currentDateTime) now = body.currentDateTime; // Use client-provided date/time
       const deviceType = body.deviceType || 'mobile';
       
       const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
