@@ -261,6 +261,29 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await audioFile.arrayBuffer();
       const base64Audio = Buffer.from(arrayBuffer).toString("base64");
       
+      // Detect the actual mimeType from the file, with fallback for iOS formats
+      const fileMimeType = audioFile.type || "";
+      let geminiMimeType = "audio/webm"; // Default
+      
+      // Map common audio formats to Gemini-supported formats
+      // iPhone Safari typically records as audio/mp4 or audio/m4a
+      if (fileMimeType.includes("mp4") || fileMimeType.includes("m4a") || fileMimeType === "audio/x-m4a") {
+        geminiMimeType = "audio/mp4";
+      } else if (fileMimeType.includes("aac")) {
+        geminiMimeType = "audio/aac";
+      } else if (fileMimeType.includes("webm")) {
+        geminiMimeType = "audio/webm";
+      } else if (fileMimeType.includes("ogg")) {
+        geminiMimeType = "audio/ogg";
+      } else if (fileMimeType.includes("wav")) {
+        geminiMimeType = "audio/wav";
+      } else if (fileMimeType.includes("mp3") || fileMimeType.includes("mpeg")) {
+        geminiMimeType = "audio/mp3";
+      } else if (fileMimeType) {
+        // Use the file's mimeType if provided and it's a valid audio type
+        geminiMimeType = fileMimeType;
+      }
+      
       const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
 
       const historyText = history.map(m => `${m.role}: ${m.content}`).join('\n');
@@ -278,7 +301,7 @@ export async function POST(req: NextRequest) {
         `[AUDIO INPUT DETECTED] This is an AUDIO message. You MUST include the 'transcription' field in your JSON response with the exact text of what the user said in the audio.`,
         {
           inlineData: {
-            mimeType: "audio/webm",
+            mimeType: geminiMimeType,
             data: base64Audio,
           },
         },
