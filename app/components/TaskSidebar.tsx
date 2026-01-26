@@ -85,7 +85,7 @@ export default function TaskSidebar({
             <div className="hidden md:block space-y-2 mb-6">
               <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider pl-3 flex items-center gap-2">
                 <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                Tools & Settings
+                {dict.toolsAndSettings}
               </h3>
               <div className="bg-white rounded-xl p-2.5 shadow-sm border border-gray-200 space-y-1.5">
                 <button disabled={isModelLoading} onClick={onToggleWakeWord} className={`w-full text-left px-3 py-2.5 text-sm flex items-center gap-3 rounded-lg transition-all duration-200 cursor-pointer ${
@@ -120,7 +120,7 @@ export default function TaskSidebar({
                     </svg>
                   </div>
                   <p className="text-gray-400 text-sm font-medium">{dict.noTasks}</p>
-                  <p className="text-gray-300 text-xs mt-1">Add tasks via chat or voice</p>
+                  <p className="text-gray-300 text-xs mt-1">{dict.noTasksDescription}</p>
                 </div>
             ) : (
                 Object.entries(groupedTasks).map(([category, items]) => (
