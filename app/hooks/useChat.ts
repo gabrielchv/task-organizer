@@ -41,6 +41,10 @@ export function useChat({
         content: m.transcription || m.content || "" 
     }));
 
+    // Detect device type (desktop if screen width >= 768px / md breakpoint)
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+    const deviceType = isDesktop ? 'desktop' : 'mobile';
+
     if (!isAudio) setInputVal("");
     setIsLoading(true);
 
@@ -52,13 +56,14 @@ export function useChat({
         formData.append('currentTasks', JSON.stringify(tasksRef.current)); 
         formData.append('language', lang); 
         formData.append('history', JSON.stringify(history));
+        formData.append('deviceType', deviceType);
         
         response = await fetch('/api/process', { method: 'POST', body: formData });
       } else {
         response = await fetch('/api/process', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ text: content, currentTasks: tasksRef.current, language: lang, history }) 
+            body: JSON.stringify({ text: content, currentTasks: tasksRef.current, language: lang, history, deviceType }) 
         });
       }
 
