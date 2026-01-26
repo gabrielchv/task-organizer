@@ -34,6 +34,10 @@ function getLocale(request: NextRequest): string {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  if (pathname.startsWith('/model')) {
+    return NextResponse.next()
+  }
   
   // Check if the path is missing the locale prefix
   const pathnameIsMissingLocale = locales.every(
