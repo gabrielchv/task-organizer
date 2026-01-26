@@ -10,6 +10,50 @@ const model = genAI.getGenerativeModel({
   tools: [{ googleSearch: {} }] 
 });
 
+// Initialize fallback model with responseSchema (no tools, for JSON formatting)
+const fallbackModel = genAI.getGenerativeModel({ 
+  model: "gemini-2.5-flash",
+  // @ts-ignore - types not updated yet
+  responseMimeType: "application/json",
+  // @ts-ignore - types not updated yet
+  responseJsonSchema: {
+    type: "object",
+    properties: {
+      summary: {
+        type: "string",
+        description: "Brief summary response (1-2 sentences max)"
+      },
+      tasks: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            status: { type: "string", enum: ["pending", "completed"] },
+            category: { type: "string" },
+            date: { 
+              anyOf: [
+                { type: "string" },
+                { type: "null" }
+              ]
+            }
+          },
+          required: ["id", "title", "status", "category", "date"]
+        }
+      },
+      transcription: {
+        anyOf: [
+          { type: "string" },
+          { type: "null" }
+        ],
+        description: "Exact transcription of user's audio input, or null for text input"
+      }
+    },
+    required: ["summary", "tasks", "transcription"]
+  }
+});
+
 const PROMPTS = {
   'en-US': `
     You are Task Helper AI, an intelligent personal organizer.
@@ -231,6 +275,81 @@ const PROMPTS = {
   `
 };
 
+/**
+ * Fallback function to reformat non-JSON or malformed JSON responses using a model with responseSchema
+ * Only called when the primary model fails to return valid JSON
+ */
+async function reformatResponseWithSchema(
+  rawResponse: string,
+  currentTasks: any[],
+  language: string,
+  isAudioInput: boolean
+): Promise<any> {
+  const systemPrompt = PROMPTS[language as keyof typeof PROMPTS] || PROMPTS['en-US'];
+  
+  const reformatPrompt = `${systemPrompt}
+
+[CRITICAL TASK: REFORMAT RESPONSE]
+The AI assistant returned a response that was not in valid JSON format. Your task is to extract the information from the following response and format it as valid JSON according to the schema.
+
+Original response (may contain text, markdown, or partial JSON):
+${rawResponse}
+
+Current tasks (preserve these unless explicitly modified):
+${JSON.stringify(currentTasks)}
+
+${isAudioInput 
+  ? "Note: This was an AUDIO input, so include the 'transcription' field with the exact text the user said in the audio."
+  : "Note: This was a TEXT input, so set 'transcription' to null."
+}
+
+Extract the summary, tasks, and transcription from the original response. The responseSchema will enforce the correct JSON format automatically.`;
+
+  try {
+    const result = await fallbackModel.generateContent(reformatPrompt);
+    let responseText = result.response.text();
+    
+    // Clean the response - remove markdown code blocks if present (even with responseSchema, sometimes it still wraps)
+    responseText = responseText.trim();
+    responseText = responseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    
+    // Try to extract JSON object if wrapped in text
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      responseText = jsonMatch[0];
+    }
+    
+    // Parse the JSON response (should be valid due to responseSchema)
+    const parsed = JSON.parse(responseText);
+    
+    // Ensure tasks array exists and is valid
+    if (!Array.isArray(parsed.tasks)) {
+      parsed.tasks = currentTasks;
+    }
+    
+    // Ensure required fields exist
+    if (!parsed.summary) {
+      parsed.summary = "I processed your request.";
+    }
+    
+    // Ensure transcription is set correctly
+    if (!isAudioInput) {
+      parsed.transcription = null;
+    }
+    // If isAudioInput is true, keep whatever transcription was extracted (or null if not found)
+    
+    return parsed;
+  } catch (error) {
+    console.error("Fallback model error:", error);
+    // Ultimate fallback: return a safe response
+    return {
+      summary: "I apologize, but I encountered an error processing your request. Please try again.",
+      tasks: currentTasks,
+      transcription: null
+    };
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -240,8 +359,10 @@ export async function POST(req: NextRequest) {
     let language = "en-US";
     let history: { role: string, content: string }[] = [];
     let now = new Date().toISOString(); // Fallback to server time if client doesn't provide
+    let isAudioInput = false; // Track if input is audio for fallback function
 
     if (contentType.includes("multipart/form-data")) {
+      isAudioInput = true;
       const formData = await req.formData();
       const audioFile = formData.get("audio") as File;
       const tasksJson = formData.get("currentTasks") as string;
@@ -415,14 +536,15 @@ export async function POST(req: NextRequest) {
     } catch (parseError: any) {
       console.error("JSON Parse Error:", parseError);
       console.error("Raw response:", userText);
+      console.log("Using fallback model to reformat response...");
       
-      // Return error response with fallback
-      return NextResponse.json({
-        error: "Invalid JSON response from AI",
-        summary: "I apologize, but I encountered an error processing your request. Please try again.",
-        tasks: currentTasks,
-        transcription: null
-      }, { status: 500 });
+      // Use fallback model with responseSchema to reformat the response
+      parsedData = await reformatResponseWithSchema(
+        userText,
+        currentTasks,
+        language,
+        isAudioInput
+      );
     }
 
     return NextResponse.json(parsedData);
