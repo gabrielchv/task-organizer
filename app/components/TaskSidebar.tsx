@@ -78,10 +78,9 @@ export default function TaskSidebar({
               </div>
               <h2 className="font-bold text-gray-800 text-lg">{user ? dict.listTitleCloud : dict.listTitleLocal}</h2>
             </div>
-            <button onClick={onClose} className="md:hidden text-blue-600 text-sm font-semibold cursor-pointer hover:text-blue-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50">{dict.backToChat}</button>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-20">
             {/* TOOLS SECTION */}
             <div className="hidden md:block space-y-2 mb-6">
               <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider pl-3 flex items-center gap-2">
@@ -176,6 +175,19 @@ export default function TaskSidebar({
                 ))
             )}
         </div>
+
+        {/* Floating Back to Chat Button - Mobile Only */}
+        {isOpen && (
+          <div className="md:hidden fixed bottom-3 left-3 right-3 z-50 pointer-events-none">
+            <button 
+              onClick={onClose} 
+              className="w-full bg-gradient-to-br from-blue-600 to-blue-700 text-white p-4 rounded-xl hover:from-blue-700 hover:to-blue-800 active:scale-95 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 font-semibold pointer-events-auto"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+              <span>{dict.backToChat}</span>
+            </button>
+          </div>
+        )}
     </div>
   );
 }
