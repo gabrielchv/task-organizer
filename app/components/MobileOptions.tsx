@@ -86,7 +86,7 @@ export default function MobileOptions({
   return createPortal(
     <div 
         ref={menuRef}
-        className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-60 py-1 overflow-hidden animate-in fade-in" 
+        className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-2xl w-64 py-2 overflow-hidden animate-in fade-in backdrop-blur-sm" 
         style={{ 
             top: position.top, 
             right: adjustedRight ?? position.right
@@ -95,39 +95,49 @@ export default function MobileOptions({
         <button 
             disabled={isModelLoading} 
             onClick={() => { onToggleWakeWord(); onClose(); }} 
-            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-2 transition-colors border-b ${isModelLoading ? 'opacity-50' : 'hover:bg-gray-50'}`}
+            className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 transition-all border-b border-gray-100 ${isModelLoading ? 'opacity-50' : 'hover:bg-gray-50 active:bg-gray-100'}`}
         >
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
-            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                <div className="text-gray-700 font-medium">{dict.wakeWord}</div>
-                <span className="text-[10px] text-gray-400 font-normal truncate">{dict.wakeWordLabel}</span>
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isWakeWordEnabled ? 'bg-green-100' : 'bg-gray-100'}`}>
+              <svg className={`w-4 h-4 ${isWakeWordEnabled ? 'text-green-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
             </div>
-            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${isWakeWordEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <div className="text-gray-700 font-semibold">{dict.wakeWord}</div>
+                <span className="text-[10px] text-gray-500 font-normal truncate">{dict.wakeWordLabel}</span>
+            </div>
+            <div className={`text-[9px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${isWakeWordEnabled ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
                 {isWakeWordEnabled ? dict.on : dict.off}
             </div>
         </button>
 
         {canShare && (
-            <button onClick={() => { onShare(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-                {dict.share}
+            <button onClick={() => { onShare(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 flex items-center gap-3 transition-colors">
+                <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                </div>
+                <span className="font-medium">{dict.share}</span>
             </button>
         )}
 
-        <button onClick={() => { onCopy(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
-            {dict.copy}
+        <button onClick={() => { onCopy(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 flex items-center gap-3 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
+              <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+            </div>
+            <span className="font-medium">{dict.copy}</span>
         </button>
 
         {user && (
             <>
-                <button onClick={() => { onExportTasks(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 border-t flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                    {dict.export}
+                <button onClick={() => { onExportTasks(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 active:bg-blue-100 border-t border-gray-100 flex items-center gap-3 transition-colors">
+                    <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    </div>
+                    <span className="font-medium">{dict.export}</span>
                 </button>
-                <button onClick={() => { onExportCalendar(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    {dict.exportCalendar}
+                <button onClick={() => { onExportCalendar(); onClose(); }} className="w-full text-left px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 active:bg-blue-100 flex items-center gap-3 transition-colors">
+                    <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    </div>
+                    <span className="font-medium">{dict.exportCalendar}</span>
                 </button>
             </>
         )}

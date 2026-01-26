@@ -45,11 +45,11 @@ export default async function LandingPage({ params }: { params: Promise<{ lang: 
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-white flex flex-col font-sans">
+    <div className="min-h-screen overflow-y-auto bg-gradient-to-b from-white via-gray-50 to-white flex flex-col font-sans">
       {/* HEADER */}
       <header className="px-6 py-6 flex items-center max-w-5xl mx-auto w-full">
-        <div className="flex items-center gap-2">
-          <div className="bg-blue-600 text-white p-1.5 rounded-lg">
+        <div className="flex items-center gap-3">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-2 rounded-xl shadow-lg shadow-blue-500/20">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
@@ -60,22 +60,22 @@ export default async function LandingPage({ params }: { params: Promise<{ lang: 
 
       {/* HERO SECTION */}
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4 py-12 sm:py-20 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div className="inline-block mb-4 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold tracking-wide uppercase">
+        <div className="inline-block mb-6 px-4 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-600 rounded-full text-xs font-bold tracking-wide uppercase border border-blue-100 shadow-sm">
           v1.0 Beta
         </div>
         
-        <h1 className="text-4xl sm:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
+        <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent leading-tight mb-6">
           {content.heroTitle}
         </h1>
         
-        <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mb-10 leading-relaxed">
+        <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mb-12 leading-relaxed">
           {content.heroSubtitle}
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <Link 
             href={`/chat`}
-            className="px-8 py-4 bg-blue-600 text-white rounded-full font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+            className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-full font-bold text-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-2 border border-blue-500/20"
           >
             {content.cta}
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -86,15 +86,15 @@ export default async function LandingPage({ params }: { params: Promise<{ lang: 
       </main>
 
       {/* FEATURES GRID */}
-      <section className="bg-gray-50 py-16 px-4">
-        <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
+      <section className="bg-gradient-to-b from-gray-50 to-white py-20 px-4">
+        <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
           {content.features.map((feature, idx) => (
-            <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
+            <div key={idx} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl flex items-center justify-center mb-4 group-hover:from-blue-100 group-hover:to-indigo-100 transition-all">
                 {feature.icon}
               </div>
               <h3 className="font-bold text-gray-900 text-lg mb-2">{feature.title}</h3>
-              <p className="text-gray-500 text-sm leading-relaxed">
+              <p className="text-gray-600 text-sm leading-relaxed">
                 {feature.desc}
               </p>
             </div>
@@ -103,8 +103,8 @@ export default async function LandingPage({ params }: { params: Promise<{ lang: 
       </section>
 
       {/* FOOTER */}
-      <footer className="bg-white border-t border-gray-100 py-8 text-center text-gray-400 text-sm">
-        <p>&copy; {new Date().getFullYear()} Task Organizer AI. By <a className="hover:text-blue-500 transition-colors cursor-pointer" href="https://www.linkedin.com/in/gabriel-chv" target="_blank" rel="noreferrer">Gabriel Chaves</a>.</p>
+      <footer className="bg-white border-t border-gray-200 py-10 text-center text-gray-500 text-sm">
+        <p>&copy; {new Date().getFullYear()} Task Organizer AI. By <a className="hover:text-blue-600 transition-colors cursor-pointer font-medium" href="https://www.linkedin.com/in/gabriel-chv" target="_blank" rel="noreferrer">Gabriel Chaves</a>.</p>
       </footer>
     </div>
   );

@@ -32,6 +32,8 @@ const dictionaries = {
     wakeWordLabel: "Say 'hey organizer'",
     on: "On",
     off: "Off",
+    thinking: "Thinking...",
+    llmError: "I apologize, but I encountered an error processing your request. Please try again.",
     // --- Landing Page ---
     heroTitle: "Organize your life with AI",
     heroSubtitle: "Manage tasks with voice commands, intelligent categorization, and real-time synchronization.",
@@ -77,6 +79,8 @@ const dictionaries = {
     wakeWordLabel: "Diga 'olá organizador'",
     on: "Ligado",
     off: "Desligado",
+    thinking: "Pensando...",
+    llmError: "Desculpe, mas encontrei um erro ao processar sua solicitação. Por favor, tente novamente.",
     // --- Landing Page ---
     heroTitle: "Organize sua vida com IA",
     heroSubtitle: "Gerencie tarefas com comandos de voz, categorização inteligente e sincronização em tempo real.",

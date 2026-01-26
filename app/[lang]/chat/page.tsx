@@ -117,23 +117,30 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   };
 
   return (
-    <div className="fixed inset-0 h-[100dvh] flex justify-center items-center bg-[#1a1a1a] overflow-hidden font-sans">
-      <div className="w-full h-full md:h-[95vh] md:w-[95vw] md:rounded-2xl overflow-hidden md:max-w-5xl bg-gray-50 flex flex-col md:flex-row shadow-2xl relative">
+    <div className="fixed inset-0 h-[100dvh] flex justify-center items-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden font-sans">
+      <div className="w-full h-full md:h-[95vh] md:w-[95vw] md:rounded-3xl overflow-hidden md:max-w-5xl bg-white flex flex-col md:flex-row shadow-2xl relative border border-gray-200/50">
         
         {/* TOAST */}
         {toast && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide shadow-md z-50 animate-bounce whitespace-nowrap">
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-lg z-50 animate-bounce whitespace-nowrap border border-yellow-300">
             {toast}
           </div>
         )}
 
         {/* LEFT: CHAT AREA */}
         <div className={`flex-1 flex flex-col min-w-0 overflow-hidden bg-white border-r border-gray-100 transition-all duration-300 ${showTaskMenuMobile ? 'hidden md:flex' : 'flex'}`}>
-          <header className="bg-white border-b p-4 flex justify-between items-center shrink-0 z-30 shadow-sm min-h-15 md:h-18">
-            <h1 className="font-bold text-gray-800 text-lg tracking-tight">{dict.title}</h1>
+          <header className="bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 p-4 flex justify-between items-center shrink-0 z-30 shadow-sm min-h-15 md:h-18">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-sm">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
+              <h1 className="font-bold text-gray-800 text-lg tracking-tight">{dict.title}</h1>
+            </div>
             <div className="flex items-center gap-2">
               {/* OPTIONS BURGER (Mobile Only) */}
-              <button ref={optionsMenuRef} onClick={toggleOptionsMenu} className="md:hidden p-2 rounded-full hover:bg-gray-100 text-gray-500 cursor-pointer">
+              <button ref={optionsMenuRef} onClick={toggleOptionsMenu} className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer transition-colors active:scale-95">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
               </button>
               <AuthButton label={user ? dict.signOut : dict.signIn} />
@@ -146,16 +153,16 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
             dict={dict} 
           />
 
-          <div className="bg-white border-t border-gray-200 shrink-0 safe-area-bottom z-30">
-            <div className="p-3 flex gap-2 items-center max-w-3xl mx-auto w-full">
+          <div className="bg-gradient-to-t from-white via-white to-gray-50/50 border-t border-gray-200 shrink-0 safe-area-bottom z-30 backdrop-blur-sm">
+            <div className="p-3 md:p-4 flex gap-2.5 items-center max-w-3xl mx-auto w-full">
               
               {/* Task Menu Button with Glow Effect */}
               <button 
                 onClick={() => setShowTaskMenuMobile(true)} 
-                className={`md:hidden p-3 rounded-full transition-all duration-500 cursor-pointer ${
+                className={`md:hidden p-3 rounded-xl transition-all duration-500 cursor-pointer flex-shrink-0 ${
                   taskButtonGlow 
-                    ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)] scale-105' 
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white ring-2 ring-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.6)] scale-105' 
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'
                 }`}
               >
                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
@@ -164,7 +171,13 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
               <button 
                 onMouseDown={handleButtonStart} onMouseUp={handleButtonStop} 
                 onTouchStart={handleButtonStart} onTouchEnd={handleButtonStop} 
-                className={`p-3 rounded-full transition-all duration-300 flex items-center justify-center shadow-sm select-none touch-none cursor-pointer ${isRecording ? (isWakeWordTriggered ? 'bg-indigo-500 text-white scale-110 ring-4 ring-indigo-200' : 'bg-red-500 text-white scale-110 ring-4 ring-red-100') : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95'}`}
+                className={`p-3.5 rounded-xl transition-all duration-300 flex items-center justify-center shadow-md select-none touch-none cursor-pointer flex-shrink-0 ${
+                  isRecording 
+                    ? (isWakeWordTriggered 
+                        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white scale-110 ring-4 ring-indigo-200/50 shadow-indigo-500/30' 
+                        : 'bg-gradient-to-br from-red-500 to-red-600 text-white scale-110 ring-4 ring-red-200/50 shadow-red-500/30 animate-pulse') 
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95 hover:shadow-lg'
+                }`}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
               </button>
@@ -173,12 +186,16 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
                 type="text" value={inputVal} 
                 onChange={(e) => setInputVal(e.target.value)} 
                 onKeyDown={(e) => e.key === 'Enter' && handleSend(inputVal, false)} 
-                className="w-full bg-gray-50 border border-transparent rounded-full px-4 py-3 md:text-sm text-gray-800 focus:outline-none focus:bg-white focus:border-blue-100 focus:ring-2 focus:ring-blue-50 transition-all text-base" 
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 md:text-sm text-gray-800 focus:outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all text-base shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed" 
                 placeholder={dict.placeholder} 
                 disabled={isLoading || isRecording} 
               />
               
-              <button onClick={() => handleSend(inputVal, false)} disabled={isLoading || !inputVal.trim()} className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95 cursor-pointer">
+              <button 
+                onClick={() => handleSend(inputVal, false)} 
+                disabled={isLoading || !inputVal.trim()} 
+                className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-3.5 rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer flex-shrink-0"
+              >
                 <svg className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
               </button>
             </div>
