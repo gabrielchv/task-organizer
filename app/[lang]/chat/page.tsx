@@ -63,7 +63,8 @@ export default function Home({ params }: { params: Promise<{ lang: string }> }) 
   } = useAudioRecorder({ 
       onRecordingComplete: (blob) => handleSend(blob, true), 
       showToast, 
-      dict 
+      dict,
+      lang
   });
 
   const { 
