@@ -5,7 +5,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // Initialize model with Google Search tool enabled
 const model = genAI.getGenerativeModel({ 
-  model: "gemini-2.0-flash",
+  model: "gemini-2.5-flash",
   // @ts-ignore - types not updated yet
   tools: [{ googleSearch: {} }] 
 });
@@ -23,6 +23,7 @@ const PROMPTS = {
        - **USE THE GOOGLE SEARCH TOOL IMMEDIATELY.**
        - **DO NOT** reply with "I will search" or "I am looking".
        - **DO** perform the search and summarize the **actual results** found in the 'summary' field.
+       - **CRITICAL:** After the search tool returns results, you MUST format your final response as JSON (see OUTPUT FORMAT section).
 
     [FORMATTING]
     - Use **bold text** to highlight important information such as **dates**, **names**, **places**, or **specific actions**.
@@ -59,18 +60,39 @@ const PROMPTS = {
       * If ONLY a date/day is mentioned (e.g., "tomorrow", "next friday"): Use "YYYY-MM-DD" (Date only).
       * Null if no date.
 
-    [OUTPUT FORMAT]
-    - JSON ONLY.
-    - Field 'summary': A concise, friendly response. If you searched for info or "made a call", put the answer here.
-    - Field 'tasks': The COMPLETE updated array of tasks.
-    - Field 'transcription': Audio transcription (or null).
+    [OUTPUT FORMAT - CRITICAL]
+    - **YOU MUST ALWAYS RETURN VALID JSON. NO EXCEPTIONS.**
+    - **NEVER** return plain text, markdown, or any other format.
+    - **NEVER** include explanatory text before or after the JSON.
+    - **ALWAYS** start your response with { and end with }.
+    - **EVEN AFTER USING GOOGLE SEARCH TOOL:** After performing a search, you MUST format your final response as JSON.
+    - **EVEN FOR AUDIO MESSAGES:** After transcribing audio, you MUST format your final response as JSON.
+    - The JSON object MUST contain exactly these fields:
+      * 'summary': string (REQUIRED) - A concise, friendly response. If you searched for info or "made a call", put the answer here.
+      * 'tasks': array (REQUIRED) - The COMPLETE updated array of tasks. Always include ALL current tasks unless explicitly asked to delete.
+      * 'transcription': string | null (REQUIRED - see rules below)
+    - **VALIDATION:** Your response must be parseable by JSON.parse() without any errors.
+    - **NO MARKDOWN CODE BLOCKS:** Do NOT wrap JSON in markdown code blocks. Return raw JSON only.
 
-    Example JSON:
+    [TRANSCRIPTION FIELD - CRITICAL RULES]
+    - **WHAT IS TRANSCRIPTION:** The transcription is the exact text representation of what the user said in their audio message. It is the literal words spoken by the user, transcribed from the audio input.
+    - **WHEN TO INCLUDE TRANSCRIPTION:**
+      * **IF THE INPUT IS AUDIO:** You MUST ALWAYS include the 'transcription' field with the exact text of what the user said in the audio.
+      * **IF THE INPUT IS TEXT:** You MUST set 'transcription' to null or omit it entirely.
+    - **TRANSCRIPTION REQUIREMENTS:**
+      * Must be a string containing the exact words spoken in the audio
+      * Should be in the same language as the audio input
+      * Should NOT include any interpretation, summary, or additional commentary
+      * Should be the raw transcription of the user's speech
+      * Example: If user says "Add dentist appointment for Friday at 2pm", transcription should be exactly: "Add dentist appointment for Friday at 2pm"
+    - **CRITICAL:** When you receive an audio input, you MUST transcribe it and include it in the 'transcription' field. This is NOT optional for audio inputs.
+
+    Example JSON (this is the EXACT format you must follow):
     {
       "summary": "Calling the clinic... Done! Appointment confirmed for **Friday at 2 PM**.",
       "tasks": [
         { "id": "t-1", "title": "Buy milk", "status": "pending", "category": "Market", "date": null },
-        { "id": "t-2", "title": "Dentist Appointment", "status": "pending", "category": "Health", "date": "2024-10-25T14:00:00" }
+        { "id": "t-2", "title": "Dentist Appointment", "status": "completed", "category": "Health", "date": "2024-10-25T14:00:00" }
       ],
       "transcription": "Schedule dentist for friday at 2pm"
     }
@@ -87,6 +109,7 @@ const PROMPTS = {
        - **USE A FERRAMENTA GOOGLE SEARCH IMEDIATAMENTE.**
        - **NÃO** responda "Vou pesquisar" ou "Estou procurando".
        - **REALIZE** a pesquisa e resuma os **resultados reais** encontrados no campo 'summary'.
+       - **CRÍTICO:** Após a ferramenta de pesquisa retornar resultados, você DEVE formatar sua resposta final como JSON (veja seção FORMATO DE SAÍDA).
 
     [FORMATAÇÃO]
     - Use **negrito** para destacar informações importantes como **datas**, **nomes**, **locais** ou **ações específicas**.
@@ -123,18 +146,39 @@ const PROMPTS = {
       * Se APENAS a data/dia for mencionado (ex: "amanhã", "sexta que vem"): Use "YYYY-MM-DD" (Apenas data).
       * Null se sem data.
 
-    [FORMATO DE SAÍDA]
-    - APENAS JSON.
-    - Campo 'summary': Resposta concisa. Se você pesquisou ou "ligou", coloque a resposta aqui.
-    - Campo 'tasks': O array COMPLETO e atualizado.
-    - Campo 'transcription': Transcrição do áudio (ou null).
+    [FORMATO DE SAÍDA - CRÍTICO]
+    - **VOCÊ DEVE SEMPRE RETORNAR JSON VÁLIDO. SEM EXCEÇÕES.**
+    - **NUNCA** retorne texto simples, markdown ou qualquer outro formato.
+    - **NUNCA** inclua texto explicativo antes ou depois do JSON.
+    - **SEMPRE** comece sua resposta com { e termine com }.
+    - **MESMO APÓS USAR A FERRAMENTA GOOGLE SEARCH:** Após realizar uma pesquisa, você DEVE formatar sua resposta final como JSON.
+    - **MESMO PARA MENSAGENS DE ÁUDIO:** Após transcrever áudio, você DEVE formatar sua resposta final como JSON.
+    - O objeto JSON DEVE conter exatamente estes campos:
+      * 'summary': string (OBRIGATÓRIO) - Resposta concisa. Se você pesquisou ou "ligou", coloque a resposta aqui.
+      * 'tasks': array (OBRIGATÓRIO) - O array COMPLETO e atualizado. Sempre inclua TODAS as tarefas atuais, a menos que explicitamente solicitado para deletar.
+      * 'transcription': string | null (OBRIGATÓRIO - veja regras abaixo)
+    - **VALIDAÇÃO:** Sua resposta deve ser analisável por JSON.parse() sem erros.
+    - **SEM BLOCO DE CÓDIGO MARKDOWN:** NÃO envolva o JSON em blocos de código markdown. Retorne apenas JSON bruto.
 
-    Exemplo JSON:
+    [CAMPO TRANSCRIPTION - REGRAS CRÍTICAS]
+    - **O QUE É TRANSCRIPTION:** A transcrição é a representação textual exata do que o usuário disse em sua mensagem de áudio. São as palavras literais faladas pelo usuário, transcritas do áudio de entrada.
+    - **QUANDO INCLUIR TRANSCRIPTION:**
+      * **SE A ENTRADA FOR ÁUDIO:** Você DEVE SEMPRE incluir o campo 'transcription' com o texto exato do que o usuário disse no áudio.
+      * **SE A ENTRADA FOR TEXTO:** Você DEVE definir 'transcription' como null ou omiti-lo completamente.
+    - **REQUISITOS DE TRANSCRIPTION:**
+      * Deve ser uma string contendo as palavras exatas faladas no áudio
+      * Deve estar no mesmo idioma do áudio de entrada
+      * NÃO deve incluir interpretação, resumo ou comentários adicionais
+      * Deve ser a transcrição bruta da fala do usuário
+      * Exemplo: Se o usuário disser "Adicionar consulta do dentista para sexta às 14h", a transcrição deve ser exatamente: "Adicionar consulta do dentista para sexta às 14h"
+    - **CRÍTICO:** Quando você receber uma entrada de áudio, você DEVE transcrevê-la e incluí-la no campo 'transcription'. Isso NÃO é opcional para entradas de áudio.
+
+    Exemplo JSON (este é o formato EXATO que você deve seguir):
     {
       "summary": "Ligando para o consultório... Tudo certo! Consulta confirmada para **sexta às 14h**.",
       "tasks": [
         { "id": "t-1", "title": "Comprar leite", "status": "pending", "category": "Mercado", "date": null },
-        { "id": "t-2", "title": "Dentista", "status": "pending", "category": "Saúde", "date": "2024-10-25T14:00:00" }
+        { "id": "t-2", "title": "Dentista", "status": "completed", "category": "Saúde", "date": "2024-10-25T14:00:00" }
       ],
       "transcription": "Marcar dentista para sexta as 14h"
     }
@@ -173,13 +217,16 @@ export async function POST(req: NextRequest) {
 
       const historyText = history.map(m => `${m.role}: ${m.content}`).join('\n');
 
-      const result = await model.generateContent([
+      const chat = model.startChat();
+      
+      const result = await chat.sendMessage([
         systemPrompt,
         `Current Date/Time: ${now}`,
         `[CONVERSATION HISTORY - FOR CONTEXT ONLY]
         (Use this to resolve references like "it", "change that", etc. DO NOT assume these tasks exist unless they are in 'Current Tasks' below.)
         ${historyText}`,
         `Current Tasks (DO NOT DELETE UNLESS ASKED): ${JSON.stringify(currentTasks)}`,
+        `[AUDIO INPUT DETECTED] This is an AUDIO message. You MUST include the 'transcription' field in your JSON response with the exact text of what the user said in the audio.`,
         {
           inlineData: {
             mimeType: "audio/webm",
@@ -187,7 +234,33 @@ export async function POST(req: NextRequest) {
           },
         },
       ]);
-      userText = result.response.text();
+      
+      // Handle tool calls (like googleSearch) - continue conversation until we get final text response
+      let response = result.response;
+      let maxIterations = 5; // Prevent infinite loops
+      let iteration = 0;
+      
+      // Check if response has function calls (tool usage)
+      // @ts-ignore - functionCalls may not be in types yet
+      while ((response.functionCalls && response.functionCalls.length > 0) || !response.text()) {
+        if (iteration >= maxIterations) {
+          throw new Error("Maximum iterations reached while handling tool calls");
+        }
+        iteration++;
+        
+        // Tool was called, send another message to get final response
+        const followUp = await chat.sendMessage(
+          `${systemPrompt}\n\nIMPORTANT: After using the search tool, you MUST now return your final response as JSON in the exact format specified. Do NOT include any text before or after the JSON. Return ONLY the JSON object with 'summary', 'tasks', and 'transcription' fields. CRITICAL: Since this was an AUDIO input, you MUST include the 'transcription' field with the exact text of what the user said in the audio.`
+        );
+        response = followUp.response;
+        
+        // @ts-ignore
+        if (!response.functionCalls || response.functionCalls.length === 0) {
+          break;
+        }
+      }
+      
+      userText = response.text() || "";
 
     } else {
       const body = await req.json();
@@ -207,15 +280,73 @@ export async function POST(req: NextRequest) {
       ${historyText}
       
       Current Tasks (DO NOT DELETE UNLESS ASKED): ${JSON.stringify(currentTasks)}
+      [TEXT INPUT] This is a TEXT message (not audio). Set 'transcription' to null in your JSON response.
       User Input: ${userText}`;
       
-      const result = await model.generateContent(prompt);
-      userText = result.response.text();
+      const chat = model.startChat();
+      const result = await chat.sendMessage(prompt);
+      
+      // Handle tool calls (like googleSearch) - continue conversation until we get final text response
+      let response = result.response;
+      let maxIterations = 5; // Prevent infinite loops
+      let iteration = 0;
+      
+      // Check if response has function calls (tool usage)
+      // @ts-ignore - functionCalls may not be in types yet
+      while ((response.functionCalls && response.functionCalls.length > 0) || !response.text()) {
+        if (iteration >= maxIterations) {
+          throw new Error("Maximum iterations reached while handling tool calls");
+        }
+        iteration++;
+        
+        // Tool was called, send another message to get final response
+        const followUp = await chat.sendMessage(
+          `${systemPrompt}\n\nIMPORTANT: After using the search tool, you MUST now return your final response as JSON in the exact format specified. Do NOT include any text before or after the JSON. Return ONLY the JSON object with 'summary', 'tasks', and 'transcription' fields. Since this was a TEXT input (not audio), set 'transcription' to null.`
+        );
+        response = followUp.response;
+        
+        // @ts-ignore
+        if (!response.functionCalls || response.functionCalls.length === 0) {
+          break;
+        }
+      }
+      
+      userText = response.text() || "";
     }
 
-    const jsonMatch = userText.match(/\{[\s\S]*\}/);
-    const cleanedJson = jsonMatch ? jsonMatch[0] : userText;
-    const parsedData = JSON.parse(cleanedJson);
+    // Extract JSON from response - handle cases where there might be extra text
+    let cleanedJson = userText.trim();
+    
+    // Remove markdown code blocks if present
+    cleanedJson = cleanedJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    
+    // Try to extract JSON object if wrapped in text
+    const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanedJson = jsonMatch[0];
+    }
+    
+    // Validate and parse JSON
+    let parsedData;
+    try {
+      parsedData = JSON.parse(cleanedJson);
+      
+      // Validate required fields
+      if (!parsedData.summary || !Array.isArray(parsedData.tasks)) {
+        throw new Error("Invalid JSON format: missing required fields 'summary' or 'tasks'");
+      }
+    } catch (parseError: any) {
+      console.error("JSON Parse Error:", parseError);
+      console.error("Raw response:", userText);
+      
+      // Return error response with fallback
+      return NextResponse.json({
+        error: "Invalid JSON response from AI",
+        summary: "I apologize, but I encountered an error processing your request. Please try again.",
+        tasks: currentTasks,
+        transcription: null
+      }, { status: 500 });
+    }
 
     return NextResponse.json(parsedData);
 

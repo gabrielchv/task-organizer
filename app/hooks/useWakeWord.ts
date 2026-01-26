@@ -3,13 +3,15 @@ import { useState, useEffect, useRef } from "react";
 import { createModel } from "vosk-browser";
 
 // Configuration for supported languages
+const BUCKET_URL = "https://storage.googleapis.com/task-organizer-assets";
+
 const MODEL_CONFIG: Record<string, { path: string; grammar: string }> = {
   en: {
-    path: "/model/en/model.tar.gz",
+    path: `${BUCKET_URL}/en/model.tar.gz`,
     grammar: '["hey organizer", "[unk]"]',
   },
   pt: {
-    path: "/model/pt/model.tar.gz",
+    path: `${BUCKET_URL}/pt/model.tar.gz`,
     grammar: '["olá organizador", "[unk]"]',
   },
 };
