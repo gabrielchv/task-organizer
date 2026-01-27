@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Task Organizer
 
-## Getting Started
+A Next.js application for task management with voice recognition capabilities.
 
-First, run the development server:
+## Technologies
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js 16.1.3
+- React 19.2.3
+- TypeScript
+- Tailwind CSS
+- Firebase Authentication
+- Cloud Firestore
+- Google Generative AI (Gemini)
+- Vosk Browser (speech recognition)
+
+## Setup
+
+1. Install dependencies:
+```
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Create a `.env.local` file in the root directory with:
+```
+GEMINI_API_KEY=your_gemini_api_key_here
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Run the development server:
+```
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deployment
 
-## Learn More
+The application is deployed on Google Cloud Platform, originally accessible at task-organizer.gazerah.com.
 
-To learn more about Next.js, take a look at the following resources:
+### Google Cloud Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The project includes a Dockerfile configured for Google Cloud Run deployment. The application uses standalone output mode for optimized container builds.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+To deploy to Google Cloud Run:
 
-## Deploy on Vercel
+```
+gcloud run deploy task-helper-next --source . --region us-central1 --allow-unauthenticated --set-env-vars GEMINI_API_KEY="your_gemini_api_key"
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This command builds and deploys the application from the current directory, sets the service to allow unauthenticated access, and configures the GEMINI_API_KEY environment variable.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Vosk Model Deployment
+
+Vosk speech recognition models must be deployed to a public Google Cloud Storage bucket. The models are located in `public/model/` directory:
+
+- `public/model/en/model.tar.gz` - English model
+- `public/model/pt/model.tar.gz` - Portuguese model
+
+To configure CORS for the bucket, use:
+```
+gsutil cors set cors.json gs://task-organizer-assets
+```
+
+The bucket must be publicly accessible to allow the browser to fetch model files.
+
+## Firebase Configuration
+
+The application uses Firebase for authentication and data storage:
+- Firebase Authentication for user management
+- Cloud Firestore for storing user task data
+
+Firebase configuration is set in `app/lib/firebase.ts`.
+
+## Build
+
+Build the production version:
+```
+npm run build
+```
+
+Start the production server:
+```
+npm start
+```
