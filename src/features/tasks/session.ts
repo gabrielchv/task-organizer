@@ -2,6 +2,12 @@ import { applyOperations, type ApplyContext, type RejectionReason } from "./redu
 import type { TaskOperation } from "./operations";
 import type { Task } from "./types";
 
+/** An operation that was accepted, paired with the document it affected. */
+export interface AppliedOperation {
+  operation: TaskOperation;
+  taskId: string;
+}
+
 export interface OperationOutcome {
   ok: boolean;
   task?: Task;
@@ -20,7 +26,7 @@ export interface OperationOutcome {
 export class TaskSession {
   #tasks: Task[];
   readonly #context: ApplyContext;
-  readonly #operations: TaskOperation[] = [];
+  readonly #operations: AppliedOperation[] = [];
 
   constructor(initial: readonly Task[], context: ApplyContext) {
     this.#tasks = initial.map((task) => ({ ...task }));
@@ -31,8 +37,12 @@ export class TaskSession {
     return this.#tasks;
   }
 
-  /** The operations that were accepted, in order, ready to be persisted. */
-  get operations(): readonly TaskOperation[] {
+  /**
+   * The operations that were accepted, in order, each paired with the id of the
+   * document it affected. Carrying the id here is what lets the persistence
+   * layer write exactly the touched documents without inferring anything.
+   */
+  get operations(): readonly AppliedOperation[] {
     return this.#operations;
   }
 
@@ -52,15 +62,20 @@ export class TaskSession {
     }
 
     this.#tasks = result.tasks;
-    this.#operations.push(operation);
 
-    if (operation.type === "delete") return { ok: true };
+    if (operation.type === "delete") {
+      this.#operations.push({ operation, taskId: operation.id });
+      return { ok: true };
+    }
 
     const task =
       operation.type === "add"
         ? this.#tasks.find((candidate) => !before.has(candidate.id))
         : this.#tasks.find((candidate) => candidate.id === operation.id);
 
-    return task === undefined ? { ok: true } : { ok: true, task };
+    if (task === undefined) return { ok: true };
+
+    this.#operations.push({ operation, taskId: task.id });
+    return { ok: true, task };
   }
 }

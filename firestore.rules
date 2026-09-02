@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isValidCategory(category) {
+      return category in [
+        'appointment', 'work', 'personal', 'health',
+        'finance', 'errands', 'study', 'general'
+      ];
+    }
+
+    // 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm', in the user's local wall clock.
+    function isValidDue(date) {
+      return date == null ||
+        (date is string && date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2})?$'));
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasOnly(['title', 'status', 'category', 'date', 'createdAt', 'updatedAt'])
+        && data.keys().hasAll(['title', 'status', 'category', 'date'])
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 200
+        && data.status in ['pending', 'completed']
+        && isValidCategory(data.category)
+        && isValidDue(data.date);
+    }
+
+    // A user's tasks. The client reads them live and toggles or deletes them
+    // directly; changes made by the assistant are written by the server with
+    // the Admin SDK, which bypasses these rules by design.
+    match /users/{userId}/tasks/{taskId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidTask(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    // Rate limit counters are server-owned. The Admin SDK bypasses rules, so
+    // denying everyone here keeps them out of reach of any client.
+    match /rateLimits/{key} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

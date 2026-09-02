@@ -48,7 +48,8 @@ describe("TaskSession", () => {
     s.apply({ type: "delete", id: "ghost" });
     s.apply({ type: "delete", id: "a" });
 
-    expect(s.operations.map((op) => op.type)).toEqual(["add", "delete"]);
+    expect(s.operations.map((applied) => applied.operation.type)).toEqual(["add", "delete"]);
+    expect(s.operations.map((applied) => applied.taskId)).toEqual(["id-1", "a"]);
   });
 
   it("reports why an operation failed instead of throwing", () => {
