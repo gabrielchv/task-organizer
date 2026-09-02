@@ -15,7 +15,10 @@ export function getDictionary(locale: string): Dictionary {
 }
 
 /** Fills `{placeholder}` slots in a dictionary string. */
-export function interpolate(template: string, values: Record<string, string | number>): string {
+export function interpolate(
+  template: string,
+  values: Record<string, string | number>,
+): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) =>
     key in values ? String(values[key]) : match,
   );

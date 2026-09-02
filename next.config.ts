@@ -4,14 +4,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
-  // vosk-browser is an Emscripten build that references `fs` at module scope.
-  // It only ever runs in the browser, so the fallback keeps the bundle resolvable.
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = { ...config.resolve.fallback, fs: false };
-    }
-    return config;
-  },
+  turbopack: {},
   async headers() {
     return [
       {

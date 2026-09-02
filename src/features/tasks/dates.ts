@@ -87,7 +87,9 @@ export function formatDue(due: string, locale: string): string {
   const date = new Date(year, month - 1, day);
 
   if (timePart === undefined) {
-    return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
+    return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(
+      date,
+    );
   }
 
   const [hour, minute] = timePart.split(":").map(Number);

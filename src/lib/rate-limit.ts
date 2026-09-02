@@ -40,7 +40,10 @@ export function nextWindow(
     };
   }
 
-  const updated: WindowState = { windowStart: current.windowStart, count: current.count + 1 };
+  const updated: WindowState = {
+    windowStart: current.windowStart,
+    count: current.count + 1,
+  };
   return {
     allowed: true,
     remaining: limit - updated.count,
@@ -74,7 +77,10 @@ export async function consumeRateLimit(
 
     const decision = nextWindow(state, now, policy);
     if (decision.allowed) {
-      transaction.set(ref, { ...decision.state, expiresAt: new Date(now + policy.windowMs * 2) });
+      transaction.set(ref, {
+        ...decision.state,
+        expiresAt: new Date(now + policy.windowMs * 2),
+      });
     }
     return decision;
   });

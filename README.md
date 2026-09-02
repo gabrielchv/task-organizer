@@ -16,16 +16,19 @@ A Next.js application for task management with voice recognition capabilities.
 ## Setup
 
 1. Install dependencies:
+
 ```
 npm install
 ```
 
 2. Create a `.env.local` file in the root directory with:
+
 ```
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 3. Run the development server:
+
 ```
 npm run dev
 ```
@@ -54,6 +57,7 @@ Vosk speech recognition models must be deployed to a public Google Cloud Storage
 - `public/model/pt/model.tar.gz` - Portuguese model
 
 To configure CORS for the bucket, use:
+
 ```
 gsutil cors set cors.json gs://task-organizer-assets
 ```
@@ -63,6 +67,7 @@ The bucket must be publicly accessible to allow the browser to fetch model files
 ## Firebase Configuration
 
 The application uses Firebase for authentication and data storage:
+
 - Firebase Authentication for user management
 - Cloud Firestore for storing user task data
 
@@ -71,11 +76,13 @@ Firebase configuration is set in `app/lib/firebase.ts`.
 ## Build
 
 Build the production version:
+
 ```
 npm run build
 ```
 
 Start the production server:
+
 ```
 npm start
 ```

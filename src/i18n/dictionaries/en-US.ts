@@ -25,6 +25,7 @@ export const enUS = {
   openMenu: "Open menu",
 
   // Tasks
+  tasksMenu: "Tasks",
   listTitleCloud: "Cloud tasks",
   listTitleLocal: "Local tasks",
   noTasks: "No tasks yet.",
@@ -74,7 +75,8 @@ export const enUS = {
    */
   help: {
     taskList: {
-      mobile: "The task list is hidden. Tap the list button at the bottom left to open it.",
+      mobile:
+        "The task list is hidden. Tap the list button at the bottom left to open it.",
       desktop: "The task list is always visible on the right side of the screen.",
     },
     voice: {
@@ -95,8 +97,10 @@ export const enUS = {
         "Use the buttons at the top of the task list to copy or export to Google Tasks and Google Calendar.",
     },
     account: {
-      mobile: "Sign in with Google using the button in the header to sync tasks across devices.",
-      desktop: "Sign in with Google using the button in the header to sync tasks across devices.",
+      mobile:
+        "Sign in with Google using the button in the header to sync tasks across devices.",
+      desktop:
+        "Sign in with Google using the button in the header to sync tasks across devices.",
     },
   },
 

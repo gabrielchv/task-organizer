@@ -48,7 +48,9 @@ export function applyOperations(
   const rejected: RejectedOperation[] = [];
 
   const reject = (operation: TaskOperation, reason: RejectionReason, detail?: string) => {
-    rejected.push(detail === undefined ? { operation, reason } : { operation, reason, detail });
+    rejected.push(
+      detail === undefined ? { operation, reason } : { operation, reason, detail },
+    );
   };
 
   for (const raw of operations) {

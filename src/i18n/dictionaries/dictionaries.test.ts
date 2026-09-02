@@ -21,7 +21,9 @@ const portuguese = new Map(flatten(ptBR));
 
 describe("dictionaries", () => {
   it("has no empty strings", () => {
-    const empty = [...english, ...portuguese].filter(([, text]) => text.trim().length === 0);
+    const empty = [...english, ...portuguese].filter(
+      ([, text]) => text.trim().length === 0,
+    );
     expect(empty).toEqual([]);
   });
 
@@ -56,7 +58,9 @@ describe("getDictionary", () => {
 
 describe("interpolate", () => {
   it("substitutes named values", () => {
-    expect(interpolate("Exported {count} tasks.", { count: 3 })).toBe("Exported 3 tasks.");
+    expect(interpolate("Exported {count} tasks.", { count: 3 })).toBe(
+      "Exported 3 tasks.",
+    );
   });
 
   it("leaves unknown placeholders untouched", () => {

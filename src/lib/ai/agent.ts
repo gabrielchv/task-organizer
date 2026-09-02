@@ -1,4 +1,9 @@
-import type { Content, GenerateContentResponse, Part, PartListUnion } from "@google/genai";
+import type {
+  Content,
+  GenerateContentResponse,
+  Part,
+  PartListUnion,
+} from "@google/genai";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "./tools/types";
 
@@ -58,8 +63,11 @@ export async function* runAgent({
   for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     const stream = await chat.sendMessageStream({ message: next });
 
-    const calls: Array<{ id?: string | undefined; name: string; args: Record<string, unknown> }> =
-      [];
+    const calls: Array<{
+      id?: string | undefined;
+      name: string;
+      args: Record<string, unknown>;
+    }> = [];
     let text = "";
 
     for await (const chunk of stream) {

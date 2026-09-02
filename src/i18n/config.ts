@@ -30,7 +30,9 @@ export function matchLocale(acceptLanguage: string | null): Locale {
     if (isLocale(tag)) return tag;
     const primary = tag.split("-")[0]?.toLowerCase();
     if (!primary) continue;
-    const prefixMatch = LOCALES.find((locale) => locale.toLowerCase().startsWith(primary));
+    const prefixMatch = LOCALES.find((locale) =>
+      locale.toLowerCase().startsWith(primary),
+    );
     if (prefixMatch) return prefixMatch;
   }
 

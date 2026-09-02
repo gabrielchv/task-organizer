@@ -23,7 +23,9 @@ export function createTranscriptionTool(): ToolDefinition {
         .string()
         .min(1)
         .max(4000)
-        .describe("Verbatim transcript in the language spoken. No summary, no commentary."),
+        .describe(
+          "Verbatim transcript in the language spoken. No summary, no commentary.",
+        ),
     }),
     execute(input) {
       return { ok: true, text: input.text };

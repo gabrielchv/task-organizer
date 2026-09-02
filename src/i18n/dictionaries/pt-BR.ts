@@ -22,6 +22,7 @@ export const ptBR: Dictionary = {
   openMenu: "Abrir menu",
 
   // Tasks
+  tasksMenu: "Tarefas",
   listTitleCloud: "Tarefas na nuvem",
   listTitleLocal: "Tarefas locais",
   noTasks: "Nenhuma tarefa ainda.",

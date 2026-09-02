@@ -1,4 +1,10 @@
-import { cert, getApp, getApps, initializeApp, applicationDefault } from "firebase-admin/app";
+import {
+  cert,
+  getApp,
+  getApps,
+  initializeApp,
+  applicationDefault,
+} from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { isEmulated, serverEnv } from "@/lib/env";
@@ -21,7 +27,10 @@ function adminApp() {
       );
     }
     return initializeApp(
-      { credential: applicationDefault(), projectId: process.env.GCLOUD_PROJECT ?? "task-helper-test" },
+      {
+        credential: applicationDefault(),
+        projectId: process.env.GCLOUD_PROJECT ?? "task-helper-test",
+      },
       APP_NAME,
     );
   }

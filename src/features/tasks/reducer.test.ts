@@ -99,7 +99,9 @@ describe("applyOperations", () => {
     it("changes only the fields provided and bumps updatedAt", () => {
       const existing = [task({ id: "a", title: "Buy milk", category: "errands" })];
 
-      const result = apply(existing, [{ type: "update", id: "a", title: "Buy oat milk" }]);
+      const result = apply(existing, [
+        { type: "update", id: "a", title: "Buy oat milk" },
+      ]);
 
       expect(result.tasks[0]).toMatchObject({
         id: "a",
@@ -130,14 +132,19 @@ describe("applyOperations", () => {
     it("completes a task", () => {
       const existing = [task({ id: "a", title: "Gym" })];
 
-      const result = apply(existing, [{ type: "set_status", id: "a", status: "completed" }]);
+      const result = apply(existing, [
+        { type: "set_status", id: "a", status: "completed" },
+      ]);
 
       expect(result.tasks[0]?.status).toBe("completed");
       expect(result.tasks[0]?.updatedAt).toBe(NOW.toISOString());
     });
 
     it("rejects an unknown id", () => {
-      const result = apply([], [{ type: "set_status", id: "ghost", status: "completed" }]);
+      const result = apply(
+        [],
+        [{ type: "set_status", id: "ghost", status: "completed" }],
+      );
 
       expect(result.rejected[0]?.reason).toBe("not_found");
     });

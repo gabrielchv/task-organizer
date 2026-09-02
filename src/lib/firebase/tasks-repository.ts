@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { normalizeCategory } from "@/features/tasks/categories";
+import { toDocument, toTask } from "@/features/tasks/mapping";
 import type { AppliedOperation } from "@/features/tasks/session";
 import type { Task } from "@/features/tasks/types";
 
@@ -7,29 +7,6 @@ const TASKS_LIMIT = 500;
 
 function tasksCollection(db: Firestore, uid: string) {
   return db.collection("users").doc(uid).collection("tasks");
-}
-
-/**
- * Reads a stored document into a `Task`.
- *
- * Documents written before this rewrite have no timestamps and hold localized
- * free-text categories, so every field is coerced here rather than trusted.
- */
-function toTask(id: string, data: FirebaseFirestore.DocumentData): Task {
-  const date = typeof data["date"] === "string" ? data["date"] : null;
-  const createdAt = typeof data["createdAt"] === "string" ? data["createdAt"] : undefined;
-  const updatedAt = typeof data["updatedAt"] === "string" ? data["updatedAt"] : undefined;
-  const fallback = new Date(0).toISOString();
-
-  return {
-    id,
-    title: typeof data["title"] === "string" ? data["title"] : "",
-    status: data["status"] === "completed" ? "completed" : "pending",
-    category: normalizeCategory(data["category"]),
-    date,
-    createdAt: createdAt ?? fallback,
-    updatedAt: updatedAt ?? createdAt ?? fallback,
-  };
 }
 
 export async function readTasks(db: Firestore, uid: string): Promise<Task[]> {
@@ -72,8 +49,7 @@ export async function persistOperations(
     }
     const task = byId.get(id);
     if (!task) continue;
-    const { id: _id, ...fields } = task;
-    batch.set(ref, fields, { merge: true });
+    batch.set(ref, toDocument(task), { merge: true });
   }
 
   await batch.commit();

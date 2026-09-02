@@ -66,9 +66,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const { searchApiKey } = { searchApiKey: serverEnv().SEARCH_API_KEY };
     const toolset = buildToolset({ deviceType: body.deviceType, searchApiKey });
-    const tools = audio
-      ? [...toolset.tools, createTranscriptionTool()]
-      : toolset.tools;
+    const tools = audio ? [...toolset.tools, createTranscriptionTool()] : toolset.tools;
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
 
     const systemInstruction = buildSystemInstruction({
@@ -188,7 +186,11 @@ function parseBody(raw: FormDataEntryValue | string | null): ChatRequest {
 
   const parsed = chatRequestSchema.safeParse(json);
   if (!parsed.success) {
-    throw new RequestError("invalid_request", 400, parsed.error.issues[0]?.message ?? "invalid");
+    throw new RequestError(
+      "invalid_request",
+      400,
+      parsed.error.issues[0]?.message ?? "invalid",
+    );
   }
   return parsed.data;
 }
@@ -200,14 +202,21 @@ function parseBody(raw: FormDataEntryValue | string | null): ChatRequest {
 function normalizeAudioType(reported: string): string {
   const base = reported.split(";")[0]?.trim().toLowerCase() ?? "";
   if (!(ALLOWED_AUDIO_TYPES as readonly string[]).includes(base)) {
-    throw new RequestError("unsupported_media", 415, `unsupported audio type: ${base || "unknown"}`);
+    throw new RequestError(
+      "unsupported_media",
+      415,
+      `unsupported audio type: ${base || "unknown"}`,
+    );
   }
   if (base === "audio/x-m4a" || base === "audio/m4a") return "audio/mp4";
   if (base === "audio/mp3") return "audio/mpeg";
   return base;
 }
 
-async function enforceRateLimit(uid: string | undefined, request: Request): Promise<void> {
+async function enforceRateLimit(
+  uid: string | undefined,
+  request: Request,
+): Promise<void> {
   const identity = uid ?? `ip:${hashClientIp(request)}`;
   const [perMinute, perDay] = uid
     ? ([POLICIES.user, POLICIES.userDaily] as const)

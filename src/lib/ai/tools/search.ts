@@ -32,7 +32,11 @@ export function createWebSearchTool(apiKey: string): ToolDefinition {
       "Search the public web for facts you do not know: opening hours, weather, news, places. " +
       "Summarize the results for the user and mention where they came from.",
     schema: z.object({
-      query: z.string().min(1).max(300).describe("The search query, in the user's language."),
+      query: z
+        .string()
+        .min(1)
+        .max(300)
+        .describe("The search query, in the user's language."),
     }),
     async execute(input, { locale, signal }) {
       const url = new URL(BRAVE_ENDPOINT);

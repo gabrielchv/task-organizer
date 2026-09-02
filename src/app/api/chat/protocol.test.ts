@@ -10,21 +10,29 @@ describe("chatRequestSchema", () => {
   });
 
   it("rejects an unknown locale", () => {
-    expect(chatRequestSchema.safeParse({ text: "hi", locale: "de-DE" }).success).toBe(false);
+    expect(chatRequestSchema.safeParse({ text: "hi", locale: "de-DE" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects an oversized message", () => {
-    const result = chatRequestSchema.safeParse({ text: "x".repeat(5000), locale: "en-US" });
+    const result = chatRequestSchema.safeParse({
+      text: "x".repeat(5000),
+      locale: "en-US",
+    });
 
     expect(result.success).toBe(false);
   });
 
   it("caps how much history a client can replay", () => {
-    const history = Array.from({ length: 20 }, () => ({ role: "user" as const, text: "hi" }));
+    const history = Array.from({ length: 20 }, () => ({
+      role: "user" as const,
+      text: "hi",
+    }));
 
-    expect(chatRequestSchema.safeParse({ text: "hi", locale: "en-US", history }).success).toBe(
-      false,
-    );
+    expect(
+      chatRequestSchema.safeParse({ text: "hi", locale: "en-US", history }).success,
+    ).toBe(false);
   });
 
   it("rejects a malformed guest task list", () => {
@@ -42,7 +50,8 @@ describe("SSE round trip", () => {
   it("parses events emitted by the encoder", () => {
     const parse = createEventParser();
     const wire =
-      encodeEvent({ type: "text", delta: "Hello" }) + encodeEvent({ type: "done", text: "Hello" });
+      encodeEvent({ type: "text", delta: "Hello" }) +
+      encodeEvent({ type: "done", text: "Hello" });
 
     expect(parse(wire)).toEqual([
       { type: "text", delta: "Hello" },
@@ -61,16 +70,18 @@ describe("SSE round trip", () => {
 
   it("survives text containing newlines and braces", () => {
     const parse = createEventParser();
-    const delta = "line one\nline two }{ \"quoted\"";
+    const delta = 'line one\nline two }{ "quoted"';
 
-    expect(parse(encodeEvent({ type: "text", delta }))).toEqual([{ type: "text", delta }]);
+    expect(parse(encodeEvent({ type: "text", delta }))).toEqual([
+      { type: "text", delta },
+    ]);
   });
 
   it("skips a frame it cannot parse instead of aborting", () => {
     const parse = createEventParser();
 
-    expect(parse(`data: {broken\n\n${encodeEvent({ type: "done", text: "ok" })}`)).toEqual([
-      { type: "done", text: "ok" },
-    ]);
+    expect(
+      parse(`data: {broken\n\n${encodeEvent({ type: "done", text: "ok" })}`),
+    ).toEqual([{ type: "done", text: "ok" }]);
   });
 });

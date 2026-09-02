@@ -70,7 +70,10 @@ export function publicEnv(): PublicEnv {
   const parsed = publicSchema.safeParse(rawPublicEnv);
   if (!parsed.success) {
     const issues = parsed.error.issues
-      .map((issue) => `  - NEXT_PUBLIC_${issue.path.join("_").toUpperCase()}: ${issue.message}`)
+      .map(
+        (issue) =>
+          `  - NEXT_PUBLIC_${issue.path.join("_").toUpperCase()}: ${issue.message}`,
+      )
       .join("\n");
     throw new Error(`Invalid public environment:\n${issues}`);
   }

@@ -25,7 +25,10 @@ export interface ToolDefinition<TSchema extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   schema: TSchema;
-  execute(input: z.output<TSchema>, context: ToolContext): Promise<ToolResult> | ToolResult;
+  execute(
+    input: z.output<TSchema>,
+    context: ToolContext,
+  ): Promise<ToolResult> | ToolResult;
 }
 
 /** Helper that keeps `execute`'s input inferred from `schema`. */

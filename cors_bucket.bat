@@ -1,1 +1,0 @@
-gsutil cors set cors.json gs://task-organizer-assets

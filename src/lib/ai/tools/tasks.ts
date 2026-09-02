@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  dueSchema,
-  statusSchema,
-  titleSchema,
-} from "@/features/tasks/operations";
+import { dueSchema, statusSchema, titleSchema } from "@/features/tasks/operations";
 import { TASK_CATEGORIES } from "@/features/tasks/types";
 import type { Task } from "@/features/tasks/types";
 import { defineTool, type ToolDefinition, type ToolResult } from "./types";
@@ -20,7 +16,10 @@ const dateField = dueSchema
       "system instruction. Omit when the user gave no date.",
   );
 
-const idField = z.string().min(1).describe("The task's id, taken from the current task list.");
+const idField = z
+  .string()
+  .min(1)
+  .describe("The task's id, taken from the current task list.");
 
 /** What the model sees. Timestamps are dropped: it never needs to reason about them. */
 function summarize(task: Task) {

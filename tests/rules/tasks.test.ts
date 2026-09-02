@@ -60,7 +60,9 @@ describe("users/{uid}/tasks", () => {
     });
 
     await assertSucceeds(getDoc(taskRef(ALICE, ALICE)));
-    await assertSucceeds(setDoc(taskRef(ALICE, ALICE), validTask({ status: "completed" })));
+    await assertSucceeds(
+      setDoc(taskRef(ALICE, ALICE), validTask({ status: "completed" })),
+    );
     await assertSucceeds(deleteDoc(taskRef(ALICE, ALICE)));
   });
 
@@ -95,7 +97,9 @@ describe("users/{uid}/tasks", () => {
     });
 
     it("rejects an oversized title", async () => {
-      await assertFails(setDoc(taskRef(ALICE, ALICE), validTask({ title: "x".repeat(201) })));
+      await assertFails(
+        setDoc(taskRef(ALICE, ALICE), validTask({ title: "x".repeat(201) })),
+      );
     });
 
     it("rejects an unknown status", async () => {
@@ -112,7 +116,9 @@ describe("users/{uid}/tasks", () => {
 
     it("accepts a null date and an all-day date", async () => {
       await assertSucceeds(setDoc(taskRef(ALICE, ALICE), validTask({ date: null })));
-      await assertSucceeds(setDoc(taskRef(ALICE, ALICE), validTask({ date: "2026-03-12" })));
+      await assertSucceeds(
+        setDoc(taskRef(ALICE, ALICE), validTask({ date: "2026-03-12" })),
+      );
     });
 
     it("rejects unexpected fields", async () => {

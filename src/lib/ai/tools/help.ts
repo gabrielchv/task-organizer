@@ -19,7 +19,9 @@ export function createAppHelpTool(deviceType: "mobile" | "desktop") {
       "enable the wake word, export tasks, sign in). Always call this instead of guessing where " +
       "a button is.",
     schema: z.object({
-      topic: z.enum(TOPICS).describe("Which part of the interface the user is asking about."),
+      topic: z
+        .enum(TOPICS)
+        .describe("Which part of the interface the user is asking about."),
     }),
     execute(input, { locale }) {
       const dictionary = getDictionary(locale);

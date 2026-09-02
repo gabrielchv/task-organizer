@@ -72,7 +72,9 @@ const addTool = defineTool({
   schema: z.object({ title: z.string().min(1) }),
   execute(input, { session }) {
     const outcome = session.apply({ type: "add", title: input.title });
-    return outcome.ok ? { ok: true, id: outcome.task?.id } : { ok: false, error: outcome.reason };
+    return outcome.ok
+      ? { ok: true, id: outcome.task?.id }
+      : { ok: false, error: outcome.reason };
   },
 }) as ToolDefinition;
 
@@ -121,7 +123,11 @@ describe("runAgent", () => {
     );
 
     expect(ctx.session.tasks.map((task) => task.title)).toEqual(["Dentist"]);
-    expect(events).toContainEqual({ type: "tool_call", name: "add_task", args: { title: "Dentist" } });
+    expect(events).toContainEqual({
+      type: "tool_call",
+      name: "add_task",
+      args: { title: "Dentist" },
+    });
     expect(events).toContainEqual({ type: "tool_result", name: "add_task", ok: true });
     expect(events.at(-1)).toEqual({ type: "done", text: "Added **Dentist**." });
 
@@ -146,7 +152,9 @@ describe("runAgent", () => {
     ]);
     const ctx = context();
 
-    await collect(runAgent({ chat, message: "add milk and bread", toolsByName, context: ctx }));
+    await collect(
+      runAgent({ chat, message: "add milk and bread", toolsByName, context: ctx }),
+    );
 
     expect(ctx.session.tasks.map((task) => task.title)).toEqual(["Milk", "Bread"]);
   });
@@ -165,7 +173,10 @@ describe("runAgent", () => {
 
     expect(events).toContainEqual({ type: "tool_result", name: "add_task", ok: false });
     const firstResponse = functionResponses(chat.sent[1] as PartListUnion)[0];
-    expect(firstResponse?.response).toMatchObject({ ok: false, error: "invalid arguments" });
+    expect(firstResponse?.response).toMatchObject({
+      ok: false,
+      error: "invalid arguments",
+    });
     expect(ctx.session.tasks).toHaveLength(1);
   });
 
@@ -175,7 +186,9 @@ describe("runAgent", () => {
       { text: "I can't do that." },
     ]);
 
-    await collect(runAgent({ chat, message: "email my boss", toolsByName, context: context() }));
+    await collect(
+      runAgent({ chat, message: "email my boss", toolsByName, context: context() }),
+    );
 
     expect(functionResponses(chat.sent[1] as PartListUnion)[0]?.response).toEqual({
       ok: false,
@@ -184,7 +197,10 @@ describe("runAgent", () => {
   });
 
   it("turns a throwing tool into a failed result", async () => {
-    const chat = scriptedChat([{ calls: [{ name: "explode", args: {} }] }, { text: "Sorry." }]);
+    const chat = scriptedChat([
+      { calls: [{ name: "explode", args: {} }] },
+      { text: "Sorry." },
+    ]);
 
     await collect(runAgent({ chat, message: "boom", toolsByName, context: context() }));
 
