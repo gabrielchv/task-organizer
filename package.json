@@ -20,7 +20,7 @@
     "test:rules": "firebase emulators:exec --only firestore --project task-helper-test \"vitest run --config vitest.rules.config.ts\"",
     "test:e2e": "playwright test",
     "emulators": "firebase emulators:start --project task-helper-test",
-    "start:local": "cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && node .next/standalone/server.js"
+    "start:local": "rm -rf .next/standalone/public .next/standalone/.next/static && cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && node .next/standalone/server.js"
   },
   "dependencies": {
     "@google/genai": "^2.20.0",

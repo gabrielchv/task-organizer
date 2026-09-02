@@ -22,9 +22,12 @@ export default defineConfig({
     { name: "mobile-safari", use: { ...devices["iPhone 13"] } },
   ],
   webServer: {
-    // The standalone server is what the container runs, so that is what the
-    // browser tests drive rather than `next start`.
-    command: "npm run start:local",
+    // Build here rather than as a separate step: NEXT_PUBLIC_* values are
+    // inlined at build time, so a build that did not see `env` below would
+    // produce a bundle that throws on boot. The standalone server is what the
+    // container runs, so that is what the browser tests drive.
+    command: "npm run build && npm run start:local",
+    timeout: 180_000,
     port: PORT,
     reuseExistingServer: !process.env.CI,
     env: {
