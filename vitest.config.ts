@@ -13,8 +13,8 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      include: ["src/features/**", "src/lib/**"],
-      exclude: ["**/*.test.*", "src/lib/firebase/**"],
+      include: ["src/features/**", "src/lib/**", "src/app/api/**", "src/i18n/**"],
+      exclude: ["**/*.test.*", "src/lib/firebase/client.ts", "src/lib/firebase/admin.ts"],
     },
   },
 });
