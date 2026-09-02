@@ -1,40 +1,48 @@
-# 1. Base image (UPDATED TO 20)
-FROM node:20-alpine AS base
+# syntax=docker/dockerfile:1
 
-# 2. Dependencies
+FROM node:22-alpine AS base
+# Next's standalone server binds the port Cloud Run injects.
+ENV NEXT_TELEMETRY_DISABLED=1
+
 FROM base AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-# install dependencies
-RUN npm ci
+COPY package.json package-lock.json ./
+# Browsers and emulator binaries belong in CI, not in the build image.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm ci --no-audit --no-fund
 
-# 3. Builder
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# This builds the Next.js project
+# Public config is inlined into the client bundle at build time, so it has to be
+# present here rather than only at runtime.
+ARG NEXT_PUBLIC_FIREBASE_API_KEY
+ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
+ARG NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+ARG NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+ARG NEXT_PUBLIC_FIREBASE_APP_ID
+ARG NEXT_PUBLIC_VOSK_BUCKET_URL
+ENV NODE_ENV=production
 RUN npm run build
 
-# 4. Runner (Production image)
 FROM base AS runner
 WORKDIR /app
-ENV NODE_ENV production
+ENV NODE_ENV=production
+ENV PORT=8080
 
-# Create a system group and user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser --system --uid 1001 nextjs
 
-# Copy the built standalone output
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# Ensure 'output: "standalone"' is in next.config.ts for this to work
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
-
-# Cloud Run injects the PORT environment variable
-ENV PORT 8080
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]
