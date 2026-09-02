@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.github
+coverage
+playwright-report
+test-results
+tests
+docs
+*.md
+.env*
+!.env.example
+Dockerfile
+.dockerignore
+firebase.json
+firestore.rules
