@@ -37,7 +37,12 @@ export function useChat({
   onGuestTasks,
   showToast,
 }: UseChatOptions): UseChatResult {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Seeded through the initializer rather than an effect: the greeting is
+  // known at mount, and setting state from an effect costs an extra render
+  // (and trips react-hooks/set-state-in-effect).
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    { id: "greeting", role: "assistant", content: dictionary.greeting },
+  ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -45,14 +50,6 @@ export function useChat({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
-
-  useEffect(() => {
-    setMessages((current) =>
-      current.length > 0
-        ? current
-        : [{ id: "greeting", role: "assistant", content: dictionary.greeting }],
-    );
-  }, [dictionary.greeting]);
 
   // Recorded audio is held as an object URL; release them when the view goes.
   useEffect(() => {
