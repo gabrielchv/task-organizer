@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Part } from "@google/genai";
 import { NextResponse } from "next/server";
 import { TaskSession } from "@/features/tasks/session";
@@ -10,6 +10,7 @@ import { buildSystemInstruction } from "@/lib/ai/prompt";
 import { buildToolset } from "@/lib/ai/tools";
 import { toFunctionDeclaration } from "@/lib/ai/tools/types";
 import { createTranscriptionTool, TRANSCRIPTION_TOOL_NAME } from "@/lib/ai/transcription";
+import { hashClientIp } from "@/lib/client-ip";
 import { serverEnv } from "@/lib/env";
 import { adminDb, authenticate } from "@/lib/firebase/admin";
 import { persistOperations, readTasks } from "@/lib/firebase/tasks-repository";
@@ -217,7 +218,7 @@ async function enforceRateLimit(
   uid: string | undefined,
   request: Request,
 ): Promise<void> {
-  const identity = uid ?? `ip:${hashClientIp(request)}`;
+  const identity = uid ?? `ip:${hashClientIp(request.headers.get("x-forwarded-for"))}`;
   const [perMinute, perDay] = uid
     ? ([POLICIES.user, POLICIES.userDaily] as const)
     : ([POLICIES.guest, POLICIES.guestDaily] as const);
@@ -237,13 +238,6 @@ async function enforceRateLimit(
       );
     }
   }
-}
-
-/** Hashed so raw addresses are never written to Firestore or the logs. */
-function hashClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for") ?? "";
-  const ip = forwarded.split(",")[0]?.trim() || "unknown";
-  return createHash("sha256").update(ip).digest("hex").slice(0, 32);
 }
 
 interface StreamOptions {
