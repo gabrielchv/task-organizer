@@ -1,6 +1,5 @@
 import {
   cert,
-  getApp,
   getApps,
   initializeApp,
   applicationDefault,
@@ -49,8 +48,22 @@ export function adminAuth() {
   return getAuth(adminApp());
 }
 
+/**
+ * The Firestore handle for the server.
+ *
+ * This used to be `getFirestore(getApp(APP_NAME) ?? adminApp())`, and the `??`
+ * never fired: firebase-admin's `getApp(name)` *throws* `app/no-app` when the
+ * named app has not been initialised — it does not return undefined. So
+ * `adminDb()` threw on any instance where `adminApp()` had not yet run.
+ *
+ * That was reachable, not theoretical: a guest request (`authenticate` returns
+ * early on a missing header, so `adminAuth()` never initialises the app) went
+ * straight to `enforceRateLimit`, which calls `adminDb()`. Every anonymous
+ * request on a cold Cloud Run instance returned 500 until a signed-in request
+ * happened to warm that instance.
+ */
 export function adminDb() {
-  return getFirestore(getApp(APP_NAME) ?? adminApp());
+  return getFirestore(adminApp());
 }
 
 export interface AuthenticatedUser {
